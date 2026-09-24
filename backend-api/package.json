@@ -2,10 +2,20 @@
   "name": "engagement-intelligence-platform",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "dev": "ts-node src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
   "dependencies": {
-    "@prisma/client": "^6.19.3"
+    "@prisma/client": "^6.19.3",
+    "express": "^5.1.0"
   },
   "devDependencies": {
-    "prisma": "^6.19.3"
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "prisma": "^6.19.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.0"
   }
 }
