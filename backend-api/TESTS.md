@@ -55,7 +55,7 @@ npx jest --testPathPattern="batches"
 
 ## Test Files and What They Cover
 
-The suite has **284 tests** across **5 test files**, covering three completed modules.
+The suite has **344 tests** across **9 test files**, covering four completed modules.
 
 ---
 
@@ -185,3 +185,147 @@ All three locations are picked up by the Jest config. Use `@swc/jest` for TypeSc
 - **Validation tests**: Import the Joi schema, call `schema.validate(input)`, check `error` (undefined = valid, defined = invalid)
 - **Integration tests**: Use `supertest` with a test Express app, mock the service layer with `jest.mock`
 - **No database required**: All current tests run without a database connection — services are mocked at the module boundary
+
+---
+
+## Module 9: API Documentation & Seed Data
+
+Module 9 adds **60 tests** across 4 test files. Run them with:
+
+```bash
+npx jest --testPathPattern="(attendance|feedback|mentor-assignments|swagger)" --verbose
+```
+
+### 6. `src/__tests__/attendance.integration.test.ts` — Attendance API Routes (Integration)
+
+**Module:** Ticket 9 — API Documentation & Seed Data
+
+HTTP-level tests using **supertest**. Prisma is mocked directly (no service layer — these routes use inline handlers).
+
+| Section | Tests | What it covers |
+|---------|-------|----------------|
+| **GET /api/attendance** | 3 | List all, filter by sessionId, filter by studentId |
+| **GET /api/attendance/:id** | 2 | Found 200, not found 404 |
+| **POST /api/attendance** | 6 | Create 201, missing fields 400, invalid status 400, session not found 404, student not found 404, duplicate 409 |
+| **POST /api/attendance/bulk** | 4 | Bulk create 201, skip existing, session not found 404, empty records 400 |
+| **PUT /api/attendance/:id** | 3 | Update 200, not found 404, empty body 400 |
+| **DELETE /api/attendance/:id** | 2 | Delete 200, not found 404 |
+
+**20 tests total**
+
+---
+
+### 7. `src/__tests__/feedback.integration.test.ts` — Feedback API Routes (Integration)
+
+**Module:** Ticket 9 — API Documentation & Seed Data
+
+| Section | Tests | What it covers |
+|---------|-------|----------------|
+| **GET /api/feedback** | 3 | List all, filter by sessionId, filter by studentId + trainerId |
+| **GET /api/feedback/:id** | 2 | Found 200, not found 404 |
+| **POST /api/feedback** | 7 | Create 201, missing fields 400, effortRating > 5 400, participationRating < 1 400, session not found 404, student not found 404, trainer not found 404 |
+| **PUT /api/feedback/:id** | 3 | Update 200, not found 404, empty body 400 |
+| **DELETE /api/feedback/:id** | 2 | Delete 200, not found 404 |
+
+**17 tests total**
+
+---
+
+### 8. `src/__tests__/mentor-assignments.integration.test.ts` — Mentor Assignment API Routes (Integration)
+
+**Module:** Ticket 9 — API Documentation & Seed Data
+
+| Section | Tests | What it covers |
+|---------|-------|----------------|
+| **GET /api/mentor-assignments** | 3 | List all, filter by mentorId, filter by studentId |
+| **GET /api/mentor-assignments/:id** | 2 | Found 200, not found 404 |
+| **POST /api/mentor-assignments** | 7 | Create 201, missing mentorId 400, missing studentId 400, non-UUID 400, mentor not found 404, student not found 404, duplicate 409 |
+| **DELETE /api/mentor-assignments/:id** | 2 | Delete 200, not found 404 |
+
+**14 tests total**
+
+---
+
+### 9. `src/__tests__/swagger.test.ts` — OpenAPI Spec Validation (Unit)
+
+**Module:** Ticket 9 — API Documentation & Seed Data
+
+Validates the Swagger/OpenAPI spec (`src/swagger/swagger.json`) for structural correctness without an HTTP server.
+
+| Section | Tests | What it covers |
+|---------|-------|----------------|
+| **Spec structure** | 9 | OpenAPI version 3.0.3, info block, servers defined, BearerAuth security scheme, all 8 tags present, paths for all route groups, every operation has summary/operationId, schema $refs resolve to defined components, core model schemas exist |
+
+---
+
+## Viewing Swagger UI in the Browser
+
+Swagger UI provides an interactive API explorer where you can browse endpoints, view request/response schemas, and execute test requests.
+
+### Steps
+
+1. **Start the server**
+
+   ```bash
+   cd backend-api
+   npm run dev
+   ```
+
+2. **Open Swagger UI** at `http://localhost:3000/api-docs`
+
+3. **Authenticate** (for protected endpoints)
+
+   a. Expand **Auth** > `POST /auth/login`, click "Try it out"
+   b. Enter credentials:
+      ```json
+      { "email": "admin@hope.dev", "password": "<your SEED_TEST_PASSWORD>" }
+      ```
+   c. Click "Execute" and copy the `accessToken` from the response
+   d. Click the **Authorize** button (lock icon at the top)
+   e. Paste the token (no "Bearer" prefix — Swagger UI adds it)
+   f. Click "Authorize", then "Close"
+
+4. **Try any endpoint** — expand it, click "Try it out", fill parameters, click "Execute"
+
+---
+
+## Testing Seed Data
+
+The seed script populates the database with realistic test data for manual/integration testing.
+
+### Running the seed
+
+```bash
+cd backend-api
+SEED_TEST_PASSWORD="devpassword1234" npm run seed
+```
+
+### What it creates
+
+| Data | Count | Notes |
+|------|-------|-------|
+| Roles | 6 | STUDENT, TRAINER, FACULTY, MENTOR, COORDINATOR, ADMIN |
+| Permissions | 67 | Full RBAC permission set |
+| Test users | 6 | One per role (`admin@hope.dev`, `student@hope.dev`, etc.) |
+| Additional trainers | 4 | `rajesh.kumar@hope.dev`, etc. |
+| Additional mentors | 3 | `anand.rao@hope.dev`, etc. |
+| Students | 50 | Across CS and IT departments |
+| Batches | 4 | Alpha, Beta, Gamma, Delta 2026 |
+| Sessions | 10 | Spread across batches with topics |
+| Attendance records | 200 | Weighted: 60% PRESENT, 20% LATE, 10% ABSENT, 10% EXCUSED |
+| Assessments | 8 | With sections, questions, and ~100 scored results |
+| Feedback entries | 50 | Trainer feedback with effort/participation ratings |
+| Mentor assignments | 50 | All students distributed across 4 mentors |
+
+### Verifying seed data via Swagger UI
+
+After seeding and starting the server:
+
+1. Login as `admin@hope.dev` via Swagger UI (see steps above)
+2. `GET /api/attendance` — should return 200 attendance records
+3. `GET /api/feedback` — should return 50 feedback entries
+4. `GET /api/mentor-assignments` — should return mentor-student pairings
+5. `GET /api/batches` — should return 4 batches
+6. `GET /api/assessments` — should return 8 assessments
+
+All test accounts share the password set via `SEED_TEST_PASSWORD`.
