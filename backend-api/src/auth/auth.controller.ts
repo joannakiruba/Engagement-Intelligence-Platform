@@ -6,6 +6,7 @@ import { signAccessToken } from './jwt.middleware';
 import { logger } from '../utils/logger';
 import prisma from '../utils/prisma';
 import { hashToken, generateRawToken } from '../utils/token';
+import { queueActivationEmail, queuePasswordResetEmail } from '../jobs/queue';
 
 const BCRYPT_ROUNDS = 10;
 
@@ -392,6 +393,14 @@ export async function resendActivation(req: Request, res: Response): Promise<voi
 
   logger.info('Activation token generated (email send pending)', { userId: user.id });
 
+  // Queue activation email
+  await queueActivationEmail({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    token: rawToken,
+  });
+
   res.status(200).json(genericResponse);
 }
 
@@ -426,6 +435,14 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     });
 
     logger.info('Forgot-password for PENDING user → activation token generated', { userId: user.id });
+
+    // Queue activation email for PENDING users
+    await queueActivationEmail({
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      token: rawToken,
+    });
   } else if (user.status === 'ACTIVE') {
     await prisma.passwordResetToken.updateMany({
       where: { userId: user.id, usedAt: null },
@@ -444,6 +461,14 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     });
 
     logger.info('Password reset token generated', { userId: user.id });
+
+    // Queue password reset email for ACTIVE users
+    await queuePasswordResetEmail({
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      token: rawToken,
+    });
   }
 
   res.status(200).json(genericResponse);
