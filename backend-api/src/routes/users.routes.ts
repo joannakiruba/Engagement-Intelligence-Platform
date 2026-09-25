@@ -4,7 +4,7 @@ import { authenticateJwt } from '../auth/jwt.middleware';
 import { requirePermission, enforceScopeForUser, resolveScope, getScopedStudentIds } from '../auth/rbac.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { logger } from '../utils/logger';
-import prisma from '../utils/prisma';
+import prisma from '../lib/prisma';
 import { hashToken, generateRawToken } from '../utils/token';
 
 const router = Router();

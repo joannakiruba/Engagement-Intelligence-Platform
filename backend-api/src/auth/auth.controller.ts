@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { config } from '../config';
 import { signAccessToken } from './jwt.middleware';
 import { logger } from '../utils/logger';
-import prisma from '../utils/prisma';
+import prisma from '../lib/prisma';
 import { hashToken, generateRawToken } from '../utils/token';
 import { queueActivationEmail, queuePasswordResetEmail } from '../jobs/queue';
 
