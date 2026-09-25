@@ -118,6 +118,8 @@ export const PERMISSIONS: PermissionDef[] = [
   },
   { code: 'risk_scores:read:assigned', description: "Read full risk score (incl. factors) for one's assigned students" },
   { code: 'risk_scores:read:any', description: 'Read full risk score for any student' },
+  { code: 'risk_scores:calculate:batch', description: 'Trigger risk calculation for students in own batch' },
+  { code: 'risk_scores:calculate:any', description: 'Trigger risk calculation for any student/batch' },
 
   // ---- Interventions ----
   { code: 'interventions:create:assigned', description: "Create an intervention for one's assigned students" },
@@ -193,6 +195,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     // single owned pipeline (Mentor), avoiding two people independently
     // acting on the same flagged student.
     'risk_scores:read:category:batch',
+    'risk_scores:calculate:batch',
     'notifications:read:own',
     'events:read:any',
     'proofs:read:batch',
@@ -291,6 +294,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'mentor_assignments:create',
     'mentor_assignments:read:any',
     'risk_scores:read:any',
+    'risk_scores:calculate:any',
     'interventions:read:any',
     'notifications:read:own',
     'events:create',

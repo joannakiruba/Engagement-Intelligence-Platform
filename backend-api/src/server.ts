@@ -16,6 +16,7 @@ import sessionRoutes from './routes/sessions.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import feedbackRoutes from './routes/feedback.routes';
 import mentorAssignmentRoutes from './routes/mentor-assignments.routes';
+import riskRoutes from './routes/risk.routes';
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use('/api/sessions', authenticateJwt, sessionRoutes);
 app.use('/api/attendance', authenticateJwt, attendanceRoutes);
 app.use('/api/feedback', authenticateJwt, feedbackRoutes);
 app.use('/api/mentor-assignments', authenticateJwt, mentorAssignmentRoutes);
+app.use('/api/risk', authenticateJwt, riskRoutes);
 
 app.use(errorHandler);
 

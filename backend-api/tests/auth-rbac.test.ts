@@ -448,7 +448,7 @@ describe('RBAC Scope Assignment', () => {
   test('Trainer risk score access is category-only (no factors)', () => {
     const trainerPerms = ROLE_PERMISSIONS.TRAINER;
     const riskPerms = trainerPerms.filter((p) => p.startsWith('risk_scores:'));
-    expect(riskPerms).toEqual(['risk_scores:read:category:batch']);
+    expect(riskPerms).toEqual(['risk_scores:read:category:batch', 'risk_scores:calculate:batch']);
   });
 
   test('Mentor has full risk score access for assigned students', () => {
@@ -720,7 +720,7 @@ describe('Seed Configuration', () => {
 
   test('67 unique permission codes', () => {
     const uniqueCodes = new Set(PERMISSIONS.map((p) => p.code));
-    expect(uniqueCodes.size).toBe(67);
+    expect(uniqueCodes.size).toBe(69);
   });
 
   test('no duplicate permission codes', () => {
