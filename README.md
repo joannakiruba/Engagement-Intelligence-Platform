@@ -3,7 +3,7 @@
 **Delivery Date:** October 9  
 **Development + Testing Window:** 3 weeks (Sept 18 – Oct 8)  
 **Team Size:** 10 members | **Module Cap:** 20 core modules (MVP)  
-**Team Leads:** Jaya Prathiba — AI/ML lead · Joanna Kiruba — Fullstack lead
+**Team Leads:** Tisha Angel - Team 1 lead ·  Meenakshi - Team 2 lead
 
 ---
 
