@@ -1,0 +1,647 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum AssessmentType {
+  CODING_TEST
+  QUIZ
+  ASSIGNMENT
+  CONTEST
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum InterventionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum OutcomeType {
+  IMPROVED
+  NO_CHANGE
+  DECLINED
+}
+
+enum NotificationType {
+  RISK_ALERT
+  EVENT_REMINDER
+  INTERVENTION
+  GENERAL
+}
+
+enum ProofStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Role {
+  id String @id @default(uuid())
+  @@map("roles")
+
+  name String @unique
+
+  description String?
+
+  createdAt DateTime @default(now())
+
+  users User[]
+
+  permissions RolePermission[]
+}
+
+model Permission {
+  id String @id @default(uuid())
+  @@map("permissions")
+
+  code String @unique
+
+  description String?
+
+  createdAt DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  @@map("role_permissions")
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id           String  @id @default(uuid())
+  @@map("users")
+  name         String
+  email        String  @unique
+  passwordHash String?
+  phone        String?
+
+  department String?
+  year       Int?
+
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  status UserStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens       RefreshToken[]
+  activationTokens    AccountActivationToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  batchMembers   BatchMember[]
+  trainerBatches BatchTrainer[]
+
+  attendances Attendance[]
+
+  assessmentResults AssessmentResult[]
+
+  studentQuestionScores StudentQuestionScore[]
+
+
+  feedbackReceived Feedback[] @relation("StudentFeedback")
+  feedbackGiven    Feedback[] @relation("TrainerFeedback")
+
+  mentorAssignments  MentorAssignment[] @relation("MentorAssignments")
+  studentAssignments MentorAssignment[] @relation("StudentAssignments")
+
+  riskScores RiskScore[]
+
+  interventionsAsStudent Intervention[] @relation("StudentInterventions")
+  interventionsAsMentor  Intervention[] @relation("MentorInterventions")
+
+  notifications Notification[]
+
+  eventRegistrations EventRegistration[]
+  proofSubmissions   ProofSubmission[]
+
+  auditLogs AuditLog[]
+  sessions  Session[]
+}
+
+model Batch {
+  id String @id @default(uuid())
+  @@map("batches")
+
+  name       String
+  department String?
+
+  startDate DateTime
+  endDate   DateTime?
+
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members     BatchMember[]
+  trainers    BatchTrainer[]
+  sessions    Session[]
+  assessments Assessment[]
+}
+
+model BatchMember {
+  id String @id @default(uuid())
+  @@map("batch_members")
+
+  batchId   String
+  studentId String
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  joinedAt DateTime @default(now())
+
+  @@unique([batchId, studentId])
+}
+
+model BatchTrainer {
+  id String @id @default(uuid())
+  @@map("batch_trainers")
+
+  batchId   String
+  trainerId String
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  trainer User @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@unique([batchId, trainerId])
+}
+
+model Session {
+  id String @id @default(uuid())
+  @@map("sessions")
+
+  batchId   String
+  trainerId String
+
+  title String
+  topic String?
+
+  scheduledDate DateTime
+
+  startTime DateTime
+  endTime   DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batch Batch @relation(fields: [batchId], references: [id])
+
+  trainer User @relation(fields: [trainerId], references: [id])
+
+  attendanceWindows AttendanceWindow[]
+  attendances       Attendance[]
+  feedbacks         Feedback[]
+}
+
+model AttendanceWindow {
+  id String @id @default(uuid())
+  @@map("attendance_windows")
+
+  sessionId String
+
+  label String
+
+  startTime DateTime
+  endTime   DateTime
+
+  createdAt DateTime @default(now())
+
+  session     Session      @relation(fields: [sessionId], references: [id])
+  attendances Attendance[]
+}
+
+model Attendance {
+  id String @id @default(uuid())
+  @@map("attendance")
+
+  windowId  String
+  sessionId String
+  studentId String
+
+  status AttendanceStatus
+
+  checkInTime DateTime?
+
+  remarks String?
+
+  createdAt DateTime @default(now())
+
+  window  AttendanceWindow @relation(fields: [windowId], references: [id])
+  session Session          @relation(fields: [sessionId], references: [id])
+  student User             @relation(fields: [studentId], references: [id])
+
+  @@unique([windowId, studentId])
+}
+
+model Assessment {
+  id String @id @default(uuid())
+  @@map("assessments")
+
+  batchId String
+
+  title String
+
+  type AssessmentType
+
+  maxScore Float
+
+  assessmentDate DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batch Batch @relation(fields: [batchId], references: [id])
+
+  results AssessmentResult[]
+
+  sections AssessmentSection[]
+}
+
+model AssessmentResult {
+  id String @id @default(uuid())
+  @@map("assessment_results")
+
+  assessmentId String
+  studentId    String
+
+  score Float
+
+  remarks String?
+
+  createdAt DateTime @default(now())
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id])
+
+  student User @relation(fields: [studentId], references: [id])
+
+  @@unique([assessmentId, studentId])
+}
+
+model AssessmentSection {
+  id String @id @default(uuid())
+  @@map("assessment_sections")
+
+  assessmentId String
+
+  title String
+
+  sortOrder Int @default(0)
+
+  weightage Float?
+
+  createdAt DateTime @default(now())
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  questions AssessmentQuestion[]
+}
+
+model AssessmentQuestion {
+  id String @id @default(uuid())
+  @@map("assessment_questions")
+
+  sectionId String
+
+  label String
+
+  maxScore Float
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  section AssessmentSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  studentScores StudentQuestionScore[]
+}
+
+model StudentQuestionScore {
+  id String @id @default(uuid())
+  @@map("student_question_scores")
+
+  questionId String
+  studentId  String
+
+  score Float
+
+  createdAt DateTime @default(now())
+
+  question AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@unique([questionId, studentId])
+}
+
+model Feedback {
+  id String @id @default(uuid())
+  @@map("feedback")
+
+  sessionId String
+  studentId String
+  trainerId String
+
+  effortRating        Int
+  participationRating Int
+
+  comments String?
+
+  createdAt DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id])
+
+  student User @relation("StudentFeedback", fields: [studentId], references: [id])
+
+  trainer User @relation("TrainerFeedback", fields: [trainerId], references: [id])
+}
+
+model MentorAssignment {
+  id String @id @default(uuid())
+  @@map("mentor_assignments")
+
+  mentorId  String
+  studentId String
+
+  mentor User @relation("MentorAssignments", fields: [mentorId], references: [id])
+
+  student User @relation("StudentAssignments", fields: [studentId], references: [id])
+
+  assignedAt DateTime @default(now())
+
+  @@unique([mentorId, studentId])
+}
+
+model RiskScore {
+  id String @id @default(uuid())
+  @@map("risk_scores")
+
+  studentId String
+
+  attendanceRisk Float
+  assessmentRisk Float
+  feedbackRisk   Float
+
+  totalScore Float
+
+  riskLevel RiskLevel
+
+  factors Json?
+
+  generatedAt DateTime @default(now())
+
+  student User @relation(fields: [studentId], references: [id])
+
+  interventions Intervention[]
+}
+
+model Intervention {
+  id String @id @default(uuid())
+  @@map("interventions")
+
+  studentId String
+  mentorId  String
+
+  riskScoreId String?
+
+  title       String
+  description String
+
+  status InterventionStatus @default(PENDING)
+
+  deadline DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  student User @relation("StudentInterventions", fields: [studentId], references: [id])
+
+  mentor User @relation("MentorInterventions", fields: [mentorId], references: [id])
+
+  riskScore RiskScore? @relation(fields: [riskScoreId], references: [id])
+
+  updates InterventionUpdate[]
+
+  outcome InterventionOutcome?
+}
+
+model InterventionUpdate {
+  id String @id @default(uuid())
+  @@map("intervention_updates")
+
+  interventionId String
+
+  note String
+
+  createdAt DateTime @default(now())
+
+  intervention Intervention @relation(fields: [interventionId], references: [id])
+}
+
+model InterventionOutcome {
+  id String @id @default(uuid())
+  @@map("intervention_outcomes")
+
+  interventionId String @unique
+
+  outcome OutcomeType
+
+  remarks String?
+
+  recordedAt DateTime @default(now())
+
+  intervention Intervention @relation(fields: [interventionId], references: [id])
+}
+
+model Notification {
+  id String @id @default(uuid())
+  @@map("notifications")
+
+  userId String
+
+  title   String
+  message String
+
+  type NotificationType
+
+  isRead Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Event {
+  id String @id @default(uuid())
+  @@map("events")
+
+  title       String
+  description String?
+
+  eventType String
+
+  eventDate DateTime
+
+  registrationDeadline DateTime?
+
+  createdAt DateTime @default(now())
+
+  registrations EventRegistration[]
+
+  proofSubmissions ProofSubmission[]
+}
+
+model EventRegistration {
+  id String @id @default(uuid())
+  @@map("event_registrations")
+
+  eventId   String
+  studentId String
+
+  registeredAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id])
+
+  student User @relation(fields: [studentId], references: [id])
+
+  @@unique([eventId, studentId])
+}
+
+model ProofSubmission {
+  id String @id @default(uuid())
+  @@map("proof_submissions")
+
+  eventId   String
+  studentId String
+
+  fileUrl String
+
+  fileName String
+
+  status ProofStatus @default(PENDING)
+
+  remarks String?
+
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id])
+
+  student User @relation(fields: [studentId], references: [id])
+}
+
+model RefreshToken {
+  id String @id @default(uuid())
+  @@map("refresh_tokens")
+
+  tokenHash String @unique
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  familyId        String
+  familyCreatedAt DateTime
+
+  expiresAt DateTime
+
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model AccountActivationToken {
+  id String @id @default(uuid())
+  @@map("account_activation_tokens")
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String @unique
+
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id String @id @default(uuid())
+  @@map("password_reset_tokens")
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String @unique
+
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id String @id @default(uuid())
+  @@map("audit_logs")
+
+  userId String?
+
+  entityType String
+
+  entityId String
+
+  action String
+
+  oldValues Json?
+
+  newValues Json?
+
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+}
