@@ -65,7 +65,7 @@ export async function updateAttendance(id: string, data: { status?: string; rema
 
 export async function getStudentAttendance(
   studentId: string,
-  params?: { batchId?: string; from?: string; to?: string }
+  params?: { batchId?: string; from?: string; to?: string; sessionId?: string }
 ) {
   const res = await axios.get(`${API}/student/${studentId}`, { params });
   return res.data;
@@ -97,6 +97,15 @@ export async function exportBatchExcel(
 
 export async function getWindowQR(windowId: string) {
   const res = await axios.get(`${API}/window/${windowId}/qr`);
+  return res.data;
+}
+
+// --- Excused records (trainer review) ---
+
+export async function getExcusedRecords(
+  params?: { batchId?: string; sessionId?: string; from?: string; to?: string }
+) {
+  const res = await axios.get(`${API}/excused`, { params });
   return res.data;
 }
 

@@ -6,6 +6,7 @@ import StudentAttendance from './pages/attendance/StudentAttendance';
 import QRFullscreen from './pages/attendance/QRFullscreen';
 import StudentCheckIn from './pages/attendance/StudentCheckIn';
 import AttendanceReport from './pages/attendance/AttendanceReport';
+import ExcusedReview from './pages/attendance/ExcusedReview';
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
           <Route path="/attendance/qr/:windowId" element={<QRFullscreen />} />
           <Route path="/attendance/check-in" element={<StudentCheckIn />} />
           <Route path="/attendance/report/:batchId" element={<AttendanceReport />} />
+          <Route path="/attendance/excused" element={<ExcusedReview />} />
         </Routes>
       </main>
     </div>

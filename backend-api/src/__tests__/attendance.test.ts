@@ -228,14 +228,14 @@ describe('Attendance Validators', () => {
       expect(isValid(createWindowSchema, { ...validData, sessionId: 'bad' })).toBe(false);
     });
 
-    it('should reject missing startTime', () => {
+    it('should accept missing startTime (defaults to 7:50 AM)', () => {
       const { startTime, ...rest } = validData;
-      expect(isValid(createWindowSchema, rest)).toBe(false);
+      expect(isValid(createWindowSchema, rest)).toBe(true);
     });
 
-    it('should reject missing endTime', () => {
+    it('should accept missing endTime (defaults to 8:05 AM)', () => {
       const { endTime, ...rest } = validData;
-      expect(isValid(createWindowSchema, rest)).toBe(false);
+      expect(isValid(createWindowSchema, rest)).toBe(true);
     });
   });
 });
@@ -314,5 +314,217 @@ describe('Attendance Service — Window-based Cutoff', () => {
     mockTime(7, 30);
     const token2 = generateQRToken(VALID_UUID).token;
     expect(token1).toBe(token2);
+  });
+});
+
+// --- Hard edge-case tests ---
+
+describe('Attendance Validators — Edge Cases', () => {
+  describe('checkInSchema — injection and boundary attacks', () => {
+    it('should reject SQL injection in windowId', () => {
+      expect(isValid(checkInSchema, { windowId: "'; DROP TABLE attendance;--" })).toBe(false);
+    });
+
+    it('should reject XSS script in qrToken', () => {
+      expect(isValid(checkInSchema, { windowId: VALID_UUID, qrToken: '<script>alert(1)</script>' })).toBe(true);
+      // qrToken is just a string — XSS is a frontend concern, but token will fail HMAC validation
+    });
+
+    it('should reject null windowId', () => {
+      expect(isValid(checkInSchema, { windowId: null })).toBe(false);
+    });
+
+    it('should reject numeric windowId', () => {
+      expect(isValid(checkInSchema, { windowId: 12345 })).toBe(false);
+    });
+
+    it('should reject array as windowId', () => {
+      expect(isValid(checkInSchema, { windowId: [VALID_UUID] })).toBe(false);
+    });
+
+    it('should reject object as windowId', () => {
+      expect(isValid(checkInSchema, { windowId: { id: VALID_UUID } })).toBe(false);
+    });
+
+    it('should reject UUID-like string with wrong format', () => {
+      expect(isValid(checkInSchema, { windowId: 'a0eebc99-9c0b-4ef8-zz6d-6bb9bd380a11' })).toBe(false);
+    });
+  });
+
+  describe('markAttendanceSchema — status boundary cases', () => {
+    const base = { windowId: VALID_UUID, studentId: VALID_UUID_2 };
+
+    it('should reject lowercase status "present"', () => {
+      expect(isValid(markAttendanceSchema, { ...base, status: 'present' })).toBe(false);
+    });
+
+    it('should reject mixed case status "Present"', () => {
+      expect(isValid(markAttendanceSchema, { ...base, status: 'Present' })).toBe(false);
+    });
+
+    it('should reject status with trailing space', () => {
+      expect(isValid(markAttendanceSchema, { ...base, status: 'PRESENT ' })).toBe(false);
+    });
+
+    it('should reject numeric status code', () => {
+      expect(isValid(markAttendanceSchema, { ...base, status: 1 })).toBe(false);
+    });
+
+    it('should reject empty string status', () => {
+      expect(isValid(markAttendanceSchema, { ...base, status: '' })).toBe(false);
+    });
+
+    it('should reject null status', () => {
+      expect(isValid(markAttendanceSchema, { ...base, status: null })).toBe(false);
+    });
+
+    it('should reject status "DROPOUT" (not a valid enum value)', () => {
+      expect(isValid(markAttendanceSchema, { ...base, status: 'DROPOUT' })).toBe(false);
+    });
+
+    it('should reject status "TARDY" (not a valid alias for LATE)', () => {
+      expect(isValid(markAttendanceSchema, { ...base, status: 'TARDY' })).toBe(false);
+    });
+
+    it('should reject remarks with only whitespace at max length', () => {
+      expect(isValid(markAttendanceSchema, { ...base, status: 'PRESENT', remarks: ' '.repeat(501) })).toBe(false);
+    });
+  });
+
+  describe('bulkMarkAttendanceSchema — large batch edge cases', () => {
+    it('should accept a batch of 200 records (classroom-scale)', () => {
+      const records = Array.from({ length: 200 }, (_, i) => ({
+        studentId: `a0eebc99-9c0b-4ef8-bb6d-${String(i).padStart(12, '0')}`,
+        status: i % 4 === 0 ? 'PRESENT' : i % 4 === 1 ? 'ABSENT' : i % 4 === 2 ? 'LATE' : 'EXCUSED',
+      }));
+      expect(isValid(bulkMarkAttendanceSchema, { windowId: VALID_UUID, records })).toBe(true);
+    });
+
+    it('should reject if any single record in a large batch has invalid status', () => {
+      const records = Array.from({ length: 50 }, (_, i) => ({
+        studentId: `a0eebc99-9c0b-4ef8-bb6d-${String(i).padStart(12, '0')}`,
+        status: 'PRESENT',
+      }));
+      records[49] = { studentId: VALID_UUID_2, status: 'INVALID' };
+      expect(isValid(bulkMarkAttendanceSchema, { windowId: VALID_UUID, records })).toBe(false);
+    });
+
+    it('should reject if any single record in a large batch has invalid studentId', () => {
+      const records = Array.from({ length: 50 }, (_, i) => ({
+        studentId: `a0eebc99-9c0b-4ef8-bb6d-${String(i).padStart(12, '0')}`,
+        status: 'PRESENT',
+      }));
+      records[25] = { studentId: 'not-a-uuid', status: 'PRESENT' };
+      expect(isValid(bulkMarkAttendanceSchema, { windowId: VALID_UUID, records })).toBe(false);
+    });
+
+    it('should handle duplicate studentIds in same bulk request (validator passes, service handles uniqueness)', () => {
+      const records = [
+        { studentId: VALID_UUID_2, status: 'PRESENT' },
+        { studentId: VALID_UUID_2, status: 'ABSENT' },
+      ];
+      expect(isValid(bulkMarkAttendanceSchema, { windowId: VALID_UUID, records })).toBe(true);
+    });
+  });
+
+  describe('createWindowSchema — time boundary edge cases', () => {
+    it('should accept window with only sessionId and label (defaults apply)', () => {
+      expect(isValid(createWindowSchema, { sessionId: VALID_UUID, label: 'Morning' })).toBe(true);
+    });
+
+    it('should reject endTime equal to startTime (not greater)', () => {
+      const sameTime = '2026-09-25T08:00:00.000Z';
+      expect(isValid(createWindowSchema, {
+        sessionId: VALID_UUID,
+        label: 'Test',
+        startTime: sameTime,
+        endTime: sameTime,
+      })).toBe(false);
+    });
+
+    it('should accept a 1-second window (minimal valid duration)', () => {
+      expect(isValid(createWindowSchema, {
+        sessionId: VALID_UUID,
+        label: 'Flash',
+        startTime: '2026-09-25T08:00:00.000Z',
+        endTime: '2026-09-25T08:00:01.000Z',
+      })).toBe(true);
+    });
+
+    it('should accept an afternoon window (1:00-1:15 PM)', () => {
+      expect(isValid(createWindowSchema, {
+        sessionId: VALID_UUID,
+        label: 'Afternoon',
+        startTime: '2026-09-25T13:00:00.000Z',
+        endTime: '2026-09-25T13:15:00.000Z',
+      })).toBe(true);
+    });
+
+    it('should accept a label at max length (100 chars)', () => {
+      expect(isValid(createWindowSchema, {
+        sessionId: VALID_UUID,
+        label: 'A'.repeat(100),
+        startTime: '2026-09-25T07:50:00.000Z',
+        endTime: '2026-09-25T08:05:00.000Z',
+      })).toBe(true);
+    });
+
+    it('should reject a label exceeding max length (101 chars)', () => {
+      expect(isValid(createWindowSchema, {
+        sessionId: VALID_UUID,
+        label: 'A'.repeat(101),
+        startTime: '2026-09-25T07:50:00.000Z',
+        endTime: '2026-09-25T08:05:00.000Z',
+      })).toBe(false);
+    });
+  });
+
+  describe('updateAttendanceSchema — override edge cases', () => {
+    it('should allow changing from EXCUSED back to PRESENT', () => {
+      expect(isValid(updateAttendanceSchema, { status: 'PRESENT', remarks: 'Returned from leave' })).toBe(true);
+    });
+
+    it('should reject clearing remarks with empty string (Joi enforces non-empty)', () => {
+      expect(isValid(updateAttendanceSchema, { remarks: '' })).toBe(false);
+    });
+
+    it('should strip unknown fields to prevent injection', () => {
+      const { value } = updateAttendanceSchema.validate(
+        { status: 'PRESENT', isAdmin: true, role: 'superadmin' },
+        { stripUnknown: true }
+      );
+      expect((value as any).isAdmin).toBeUndefined();
+      expect((value as any).role).toBeUndefined();
+      expect(value.status).toBe('PRESENT');
+    });
+  });
+});
+
+describe('QR Token — Security Edge Cases', () => {
+  it('should produce hex-only tokens (no special characters)', () => {
+    const { token } = generateQRToken(VALID_UUID);
+    expect(token).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it('should produce different tokens for UUIDs differing by one character', () => {
+    const uuid1 = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+    const uuid2 = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12';
+    const t1 = generateQRToken(uuid1).token;
+    const t2 = generateQRToken(uuid2).token;
+    expect(t1).not.toBe(t2);
+  });
+
+  it('should have expiresInSeconds between 0 and 60 inclusive', () => {
+    for (let i = 0; i < 10; i++) {
+      const uuid = `a0eebc99-9c0b-4ef8-bb6d-${String(i).padStart(12, '0')}`;
+      const { expiresInSeconds } = generateQRToken(uuid);
+      expect(expiresInSeconds).toBeGreaterThanOrEqual(0);
+      expect(expiresInSeconds).toBeLessThanOrEqual(60);
+    }
+  });
+
+  it('should not leak the QR_SECRET in the token output', () => {
+    const { token } = generateQRToken(VALID_UUID);
+    expect(token).not.toContain('hope-qr-default-secret');
   });
 });

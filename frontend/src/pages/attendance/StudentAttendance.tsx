@@ -38,7 +38,7 @@ interface StudentRecord {
 }
 
 interface StudentData {
-  student: { id: string; name: string; email: string; department: string | null; year: number | null };
+  student: { id: string; name: string; email: string };
   summary: {
     total: number;
     present: number;
@@ -55,6 +55,7 @@ export default function StudentAttendance() {
   const [data, setData] = useState<StudentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [batchId, setBatchId] = useState('');
+  const [sessionId, setSessionId] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
@@ -66,8 +67,9 @@ export default function StudentAttendance() {
   async function loadData() {
     setLoading(true);
     try {
-      const params: { batchId?: string; from?: string; to?: string } = {};
+      const params: { batchId?: string; from?: string; to?: string; sessionId?: string } = {};
       if (batchId) params.batchId = batchId;
+      if (sessionId) params.sessionId = sessionId;
       if (fromDate) params.from = fromDate;
       if (toDate) params.to = toDate;
       const res = await getStudentAttendance(studentId!, params);
@@ -105,7 +107,7 @@ export default function StudentAttendance() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">{student.name}</h1>
         <p className="text-gray-500 text-sm">{student.email}</p>
-        {student.department && <p className="text-gray-400 text-sm">{student.department}{student.year ? ` — Year ${student.year}` : ''}</p>}
+        <p className="text-gray-400 text-xs">ID: {student.id}</p>
       </div>
 
       {/* Attendance rate card */}
@@ -139,7 +141,7 @@ export default function StudentAttendance() {
       </div>
 
       {/* Filters */}
-      <form onSubmit={handleFilter} className="flex gap-3 mb-4 items-end">
+      <form onSubmit={handleFilter} className="flex flex-wrap gap-3 mb-4 items-end">
         <div>
           <label className="block text-xs text-gray-500 mb-1">Batch ID</label>
           <input
@@ -147,6 +149,16 @@ export default function StudentAttendance() {
             value={batchId}
             onChange={(e) => setBatchId(e.target.value)}
             placeholder="Filter by batch..."
+            className="border rounded px-3 py-1.5 text-sm w-48"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Session ID</label>
+          <input
+            type="text"
+            value={sessionId}
+            onChange={(e) => setSessionId(e.target.value)}
+            placeholder="Filter by session..."
             className="border rounded px-3 py-1.5 text-sm w-48"
           />
         </div>
@@ -178,6 +190,7 @@ export default function StudentAttendance() {
         <table className="w-full border-collapse bg-white shadow rounded-lg overflow-hidden">
           <thead>
             <tr className="bg-gray-50 text-left text-sm text-gray-600">
+              <th className="px-4 py-3">Session ID</th>
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Day</th>
               <th className="px-4 py-3">Session</th>
@@ -192,6 +205,7 @@ export default function StudentAttendance() {
               const date = new Date(rec.session.scheduledDate);
               return (
                 <tr key={rec.id} className="border-t text-sm">
+                  <td className="px-4 py-2 text-gray-400 text-xs font-mono">{rec.session.id.slice(0, 8)}</td>
                   <td className="px-4 py-2">{date.toLocaleDateString()}</td>
                   <td className="px-4 py-2 text-gray-500">{DAY_NAMES[date.getDay()]}</td>
                   <td className="px-4 py-2">{rec.session.title}</td>
@@ -210,7 +224,7 @@ export default function StudentAttendance() {
             })}
             {data.records.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">No attendance records found.</td>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">No attendance records found.</td>
               </tr>
             )}
           </tbody>

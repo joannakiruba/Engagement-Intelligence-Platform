@@ -14,8 +14,6 @@ interface StudentStat {
     id: string;
     name: string;
     email: string;
-    department: string | null;
-    year: number | null;
   };
   total: number;
   present: number;
@@ -41,8 +39,6 @@ export default function AttendanceReport() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [departmentFilter, setDepartmentFilter] = useState<string>('ALL');
-  const [yearFilter, setYearFilter] = useState<string>('ALL');
 
   useEffect(() => {
     if (!batchId) return;
@@ -86,17 +82,8 @@ export default function AttendanceReport() {
     return <div className="text-center py-10 text-red-500">Failed to load batch attendance.</div>;
   }
 
-  const departments = [...new Set(data.students.map((s) => s.student.department).filter(Boolean))] as string[];
-  const years = [...new Set(data.students.map((s) => s.student.year).filter((y) => y != null))] as number[];
-
   let filteredStudents = data.students;
 
-  if (departmentFilter !== 'ALL') {
-    filteredStudents = filteredStudents.filter((s) => s.student.department === departmentFilter);
-  }
-  if (yearFilter !== 'ALL') {
-    filteredStudents = filteredStudents.filter((s) => String(s.student.year) === yearFilter);
-  }
   if (statusFilter !== 'ALL') {
     if (statusFilter === 'LOW') {
       filteredStudents = filteredStudents.filter((s) => s.attendanceRate < 75);
@@ -119,7 +106,7 @@ export default function AttendanceReport() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-2 gap-3 mb-6">
         <div className="bg-white p-4 rounded shadow text-center">
           <div className="text-2xl font-bold">{data.totalSessions}</div>
           <div className="text-xs text-gray-500">Total Sessions</div>
@@ -127,10 +114,6 @@ export default function AttendanceReport() {
         <div className="bg-white p-4 rounded shadow text-center">
           <div className="text-2xl font-bold">{data.students.length}</div>
           <div className="text-xs text-gray-500">Total Students</div>
-        </div>
-        <div className="bg-white p-4 rounded shadow text-center">
-          <div className="text-2xl font-bold">{data.overallAttendanceRate}%</div>
-          <div className="text-xs text-gray-500">Overall Rate</div>
         </div>
       </div>
 
@@ -154,36 +137,6 @@ export default function AttendanceReport() {
             className="border rounded px-3 py-1.5 text-sm"
           />
         </div>
-        {departments.length > 0 && (
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Department</label>
-            <select
-              value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="border rounded px-3 py-1.5 text-sm"
-            >
-              <option value="ALL">All Departments</option>
-              {departments.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        {years.length > 0 && (
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Year</label>
-            <select
-              value={yearFilter}
-              onChange={(e) => setYearFilter(e.target.value)}
-              className="border rounded px-3 py-1.5 text-sm"
-            >
-              <option value="ALL">All Years</option>
-              {years.sort().map((y) => (
-                <option key={y} value={String(y)}>Year {y}</option>
-              ))}
-            </select>
-          </div>
-        )}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Attendance</label>
           <select
@@ -204,8 +157,6 @@ export default function AttendanceReport() {
             <tr className="bg-gray-50 text-left text-sm text-gray-600">
               <th className="px-4 py-3 w-8">#</th>
               <th className="px-4 py-3">Student</th>
-              <th className="px-4 py-3">Department</th>
-              <th className="px-4 py-3">Year</th>
               <th className="px-4 py-3 text-center">{STATUS_CODE.PRESENT}</th>
               <th className="px-4 py-3 text-center">{STATUS_CODE.LATE}</th>
               <th className="px-4 py-3 text-center">{STATUS_CODE.ABSENT}</th>
@@ -214,22 +165,13 @@ export default function AttendanceReport() {
             </tr>
           </thead>
           <tbody>
-            {filteredStudents.map((s, idx) => {
-              const rateColor = s.attendanceRate >= 75
-                ? 'text-green-700'
-                : s.attendanceRate >= 50
-                ? 'text-yellow-700'
-                : 'text-red-700';
-
-              return (
+            {filteredStudents.map((s, idx) => (
                 <tr key={s.student.id} className="border-t text-sm">
                   <td className="px-4 py-2 text-gray-400">{idx + 1}</td>
                   <td className="px-4 py-2">
                     <div className="font-medium">{s.student.name}</div>
                     <div className="text-xs text-gray-400">{s.student.email}</div>
                   </td>
-                  <td className="px-4 py-2 text-gray-500">{s.student.department || '—'}</td>
-                  <td className="px-4 py-2 text-gray-500">{s.student.year || '—'}</td>
                   <td className="px-4 py-2 text-center">
                     <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs">{s.present}</span>
                   </td>
@@ -242,15 +184,12 @@ export default function AttendanceReport() {
                   <td className="px-4 py-2 text-center">
                     <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">{s.excused}</span>
                   </td>
-                  <td className="px-4 py-2 text-center">
-                    <span className={`font-medium ${rateColor}`}>{s.total}</span>
-                  </td>
+                  <td className="px-4 py-2 text-center font-medium">{s.total}</td>
                 </tr>
-              );
-            })}
+            ))}
             {filteredStudents.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-400">No students match the current filters.</td>
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">No students match the current filters.</td>
               </tr>
             )}
           </tbody>

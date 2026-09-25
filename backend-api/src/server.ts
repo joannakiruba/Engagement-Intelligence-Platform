@@ -5,6 +5,7 @@ import { config } from './config';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/error.middleware';
 import { generalRateLimit } from './middleware/rate-limit.middleware';
+import { authenticateJwt } from './auth/jwt.middleware';
 import attendanceRoutes from './routes/attendance.routes';
 
 const app = express();
@@ -22,7 +23,7 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.use('/api/attendance', attendanceRoutes);
+app.use('/api/attendance', authenticateJwt, attendanceRoutes);
 
 app.use(errorHandler);
 

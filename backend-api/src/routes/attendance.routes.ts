@@ -21,6 +21,7 @@ import {
   generateQRHandler,
   createWindowHandler,
   getSessionWindowsHandler,
+  getExcusedRecordsHandler,
 } from '../controllers/attendance.controller';
 
 const router = Router();
@@ -61,5 +62,8 @@ router.get('/batch/:batchId/export', exportExcelHandler);
 
 // Generate time-rotating QR token for a window (trainer calls this)
 router.get('/window/:windowId/qr', generateQRHandler);
+
+// Get all excused records for trainer review (?batchId=&sessionId=&from=&to=)
+router.get('/excused', getExcusedRecordsHandler);
 
 export default router;

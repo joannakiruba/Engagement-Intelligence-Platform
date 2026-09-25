@@ -42,7 +42,7 @@ export const createWindowSchema = Joi.object({
     .messages({ 'string.guid': 'sessionId must be a valid UUID' }),
   label: Joi.string().min(1).max(100).required()
     .messages({ 'string.empty': 'label is required' }),
-  startTime: Joi.date().iso().required(),
-  endTime: Joi.date().iso().greater(Joi.ref('startTime')).required()
-    .messages({ 'date.greater': 'endTime must be after startTime' }),
+  startTime: Joi.date().iso().optional(),
+  endTime: Joi.date().iso().optional()
+    .when('startTime', { is: Joi.exist(), then: Joi.date().iso().greater(Joi.ref('startTime')).messages({ 'date.greater': 'endTime must be after startTime' }) }),
 });

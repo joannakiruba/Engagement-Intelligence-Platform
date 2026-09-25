@@ -460,3 +460,79 @@ model Attendance {
 | `frontend/src/App.tsx` | Added all attendance routes and imports |
 | `frontend/src/pages/batches/BatchDetail.tsx` | Added "Mark Attendance" and "View" links per session |
 | `frontend/package.json` | Added qrcode.react dependency |
+
+---
+
+## Phase 6: Requirements Audit & Fixes (2026-09-25)
+
+Audited all code against the full Ticket 7 requirements spec. Found and fixed 6 gaps:
+
+### Fix 1: JWT Authentication on All Routes (Gap #5 & #10)
+**Problem:** No auth middleware on attendance routes — endpoints were publicly accessible. Students could check in without being logged in.
+**Fix:**
+- Populated `backend-api/src/auth/jwt.middleware.ts` with `authenticateJwt` middleware (Bearer token validation, JWT verify, expiry handling)
+- Applied `authenticateJwt` to `/api/attendance` in `server.ts`
+- Changed `checkInHandler` to get `studentId` from `req.user.sub` (JWT payload) instead of request body — students must be authenticated
+
+### Fix 2: Default Attendance Window 7:50–8:05 AM (Gap #7)
+**Problem:** `createWindowSchema` required `startTime` and `endTime` — trainer had to specify times every time, no default.
+**Fix:**
+- Made `startTime` and `endTime` optional in the Joi validator
+- `createWindowHandler` applies defaults: today at 7:50 AM (start) and 8:05 AM (end) when not provided
+- Afternoon sessions still work by passing custom times
+
+### Fix 3: Attendance % Removed from On-Screen View (Gap #16)
+**Problem:** `AttendanceReport.tsx` showed overall attendance rate in a summary card and rate-based color coding per student. Requirements say % should only appear in the downloadable Excel file.
+**Fix:**
+- Removed "Overall Rate" summary card from AttendanceReport
+- Removed per-student `rateColor` styling
+- Excel export still includes `Attendance %` column (unchanged)
+
+### Fix 4: Session ID Column + Session Filter in Student History (Gap #14)
+**Problem:** `StudentAttendance.tsx` had no session ID column and no way to filter by a single session.
+**Fix:**
+- Added `sessionId` filter support to `getStudentAttendance` service function
+- Added `sessionId` query param handling in `getStudentAttendanceHandler` controller
+- Added "Session ID" filter input to the frontend filter bar
+- Added "Session ID" column (first 8 chars, monospace) to the history table
+
+### Fix 5: Dedicated Excused Review Page (Gap #4)
+**Problem:** No dedicated page for trainers to review and record reasons for excused absences. Trainers could only mark EXCUSED via the general MarkAttendance dropdown.
+**Fix:**
+- Added `getExcusedRecords` service function — fetches all EXCUSED attendance records with optional batch/session/date filters
+- Added `getExcusedRecordsHandler` controller + `GET /excused` route
+- Created `ExcusedReview.tsx` frontend page — shows all excused records in a table, inline edit for remarks, save/cancel per row
+- Added `/attendance/excused` route to `App.tsx`
+
+### Fix 6: Removed Department/Year from Views (Per User Request)
+- Stripped department and year columns from `AttendanceReport.tsx`
+- Stripped department/year filters from `AttendanceReport.tsx`
+- Simplified `StudentAttendance.tsx` student header (ID only, no dept/year)
+
+### Phase 6 Test Results
+Added 33 new edge-case tests (76 total, all passing):
+
+| Category | Tests Added | What They Cover |
+|----------|-------------|-----------------|
+| Injection attacks | 7 | SQL injection in UUID, XSS in token, null/numeric/array/object in windowId |
+| Status boundary | 9 | Lowercase, mixed case, trailing space, numeric, empty, null, invalid enum values |
+| Large batch | 4 | 200-record batch, single invalid in 50-record batch, duplicate studentIds |
+| Time boundaries | 6 | Default times, equal start/end, 1-second window, afternoon window, label length |
+| Override edge cases | 3 | EXCUSED→PRESENT, empty string remarks, unknown field stripping |
+| QR security | 4 | Hex-only output, near-identical UUID tokens differ, TTL bounds, no secret leak |
+
+### Phase 6 Files Changed
+| File | Change |
+|------|--------|
+| `backend-api/src/auth/jwt.middleware.ts` | Populated with JWT auth middleware |
+| `backend-api/src/server.ts` | Added `authenticateJwt` to attendance routes |
+| `backend-api/src/controllers/attendance.controller.ts` | Check-in uses JWT user, default window times, excused handler |
+| `backend-api/src/services/attendance.service.ts` | `sessionId` filter, `getExcusedRecords` function |
+| `backend-api/src/routes/attendance.routes.ts` | Added `GET /excused` route |
+| `backend-api/src/validators/attendance.validator.ts` | Made startTime/endTime optional |
+| `backend-api/src/__tests__/attendance.test.ts` | 33 new edge-case tests (76 total) |
+| `frontend/src/pages/attendance/AttendanceReport.tsx` | Removed % from screen, removed dept/year |
+| `frontend/src/pages/attendance/StudentAttendance.tsx` | Added session ID column/filter, simplified header |
+| `frontend/src/pages/attendance/ExcusedReview.tsx` | New dedicated excused review page |
+| `frontend/src/services/attendance.service.ts` | Added `getExcusedRecords`, `sessionId` param |
+| `frontend/src/App.tsx` | Added `/attendance/excused` route |

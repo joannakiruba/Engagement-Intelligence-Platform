@@ -15,6 +15,7 @@ import {
   generateQRForWindow,
   createAttendanceWindow,
   getSessionWindows,
+  getExcusedRecords,
 } from '../services/attendance.service';
 
 function handleServiceError(err: unknown, res: Response, next: NextFunction) {
@@ -26,7 +27,7 @@ function handleServiceError(err: unknown, res: Response, next: NextFunction) {
 
 export async function checkInHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const studentId = req.body.studentId || String(req.params.studentId);
+    const studentId = req.user!.sub;
     const result = await studentCheckIn(req.body.windowId, studentId, req.body.qrToken);
     return sendSuccess(res, result, 201);
   } catch (err) {
@@ -83,10 +84,11 @@ export async function getSessionAttendanceHandler(req: Request, res: Response, n
 
 export async function getStudentAttendanceHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const filters: { batchId?: string; from?: string; to?: string } = {};
+    const filters: { batchId?: string; from?: string; to?: string; sessionId?: string } = {};
     if (req.query.batchId) filters.batchId = String(req.query.batchId);
     if (req.query.from) filters.from = String(req.query.from);
     if (req.query.to) filters.to = String(req.query.to);
+    if (req.query.sessionId) filters.sessionId = String(req.query.sessionId);
     const result = await getStudentAttendance(String(req.params.studentId), filters);
     return sendSuccess(res, result);
   } catch (err) {
@@ -145,9 +147,28 @@ export async function generateQRHandler(req: Request, res: Response, next: NextF
 
 export async function createWindowHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const { sessionId, label, startTime, endTime } = req.body;
-    const result = await createAttendanceWindow(sessionId, label, new Date(startTime), new Date(endTime));
+    const { sessionId, label } = req.body;
+    const today = new Date();
+    const defaultStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 7, 50, 0);
+    const defaultEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 8, 5, 0);
+    const startTime = req.body.startTime ? new Date(req.body.startTime) : defaultStart;
+    const endTime = req.body.endTime ? new Date(req.body.endTime) : defaultEnd;
+    const result = await createAttendanceWindow(sessionId, label, startTime, endTime);
     return sendSuccess(res, result, 201);
+  } catch (err) {
+    return handleServiceError(err, res, next);
+  }
+}
+
+export async function getExcusedRecordsHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const filters: { batchId?: string; sessionId?: string; from?: string; to?: string } = {};
+    if (req.query.batchId) filters.batchId = String(req.query.batchId);
+    if (req.query.sessionId) filters.sessionId = String(req.query.sessionId);
+    if (req.query.from) filters.from = String(req.query.from);
+    if (req.query.to) filters.to = String(req.query.to);
+    const result = await getExcusedRecords(filters);
+    return sendSuccess(res, result);
   } catch (err) {
     return handleServiceError(err, res, next);
   }

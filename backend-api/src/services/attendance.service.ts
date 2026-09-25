@@ -484,12 +484,15 @@ export async function getSessionAttendance(sessionId: string) {
 
 export async function getStudentAttendance(
   studentId: string,
-  filters?: { batchId?: string; from?: string; to?: string }
+  filters?: { batchId?: string; from?: string; to?: string; sessionId?: string }
 ) {
   const student = await prisma.user.findUnique({ where: { id: studentId } });
   if (!student) throw new ServiceError('Student not found', 404);
 
   const where: Record<string, unknown> = { studentId };
+  if (filters?.sessionId) {
+    where.sessionId = filters.sessionId;
+  }
   if (filters?.batchId || filters?.from || filters?.to) {
     const sessionFilter: Record<string, unknown> = {};
     if (filters.batchId) sessionFilter.batchId = filters.batchId;
@@ -565,6 +568,36 @@ export async function getBatchAttendanceStats(batchId: string) {
     overallAttendanceRate: overallRate,
     students: studentStats.sort((a, b) => a.attendanceRate - b.attendanceRate),
   };
+}
+
+// --- Get excused records for trainer review ---
+
+export async function getExcusedRecords(
+  filters?: { batchId?: string; sessionId?: string; from?: string; to?: string }
+) {
+  const where: Record<string, unknown> = { status: 'EXCUSED' as AttendanceStatus };
+
+  if (filters?.sessionId) where.sessionId = filters.sessionId;
+  if (filters?.batchId || filters?.from || filters?.to) {
+    const sessionFilter: Record<string, unknown> = {};
+    if (filters.batchId) sessionFilter.batchId = filters.batchId;
+    if (filters.from || filters.to) {
+      sessionFilter.scheduledDate = {};
+      if (filters.from) (sessionFilter.scheduledDate as Record<string, unknown>).gte = new Date(filters.from);
+      if (filters.to) (sessionFilter.scheduledDate as Record<string, unknown>).lte = new Date(filters.to);
+    }
+    where.session = sessionFilter;
+  }
+
+  return prisma.attendance.findMany({
+    where,
+    include: {
+      student: { select: { id: true, name: true, email: true } },
+      session: { select: { id: true, title: true, scheduledDate: true } },
+      window: { select: { id: true, label: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
 }
 
 // --- Status code helpers ---
