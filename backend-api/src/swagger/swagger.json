@@ -330,16 +330,18 @@
     "/users/me": {
       "get": {
         "summary": "Get own profile",
+        "description": "Returns the authenticated user's profile. Identity from JWT subject. Account status and role re-read from DB before permission check. Response includes Cache-Control: no-store.",
         "tags": ["Users"],
         "security": [{ "BearerAuth": [] }],
-        "responses": { "200": { "description": "Current user profile", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/User" } } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+        "responses": { "200": { "description": "Current user profile (id, name, email, phone, department, year, status, role, createdAt, updatedAt)", "headers": { "Cache-Control": { "schema": { "type": "string", "example": "no-store" } } }, "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/User" } } } } } }, "401": { "description": "Missing/invalid/expired JWT or inactive account" }, "403": { "description": "Role lacks users:read:own" }, "404": { "description": "User record not found" } }
       },
       "patch": {
-        "summary": "Update own profile",
+        "summary": "Update own profile (name and phone only)",
+        "description": "Self-service profile update. Only 'name' and 'phone' accepted; any other field returns 400 (strict validation). Identity from JWT subject. Update and PROFILE_UPDATED audit record committed in one transaction.",
         "tags": ["Users"],
         "security": [{ "BearerAuth": [] }],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "minProperties": 1, "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 255 }, "phone": { "type": "string", "nullable": true } } } } } },
-        "responses": { "200": { "description": "Updated profile", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/User" } } } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "minProperties": 1, "properties": { "name": { "type": "string", "description": "Trimmed, 1-255 chars, no control characters", "minLength": 1, "maxLength": 255 }, "phone": { "type": "string", "nullable": true, "description": "Optional leading +, digits/spaces/parens/hyphens, 7-15 digits, max 30 chars. Empty/null clears." } } } } } },
+        "responses": { "200": { "description": "Updated profile with consistent safe fields and timestamps", "headers": { "Cache-Control": { "schema": { "type": "string", "example": "no-store" } } }, "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/User" } } } } } }, "400": { "description": "Validation error: empty body, forbidden/unknown fields, invalid name or phone" }, "401": { "description": "Missing/invalid/expired JWT or inactive account" }, "403": { "description": "Role lacks users:update:self" }, "404": { "description": "User not found" } }
       }
     },
     "/users": {

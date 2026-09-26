@@ -16,6 +16,7 @@ build/
 *.egg-info/
 .next/
 out/
+*.tsbuildinfo
 
 # Environment variables
 .env
