@@ -1,8 +1,8 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
 import { authenticateJwt } from '../auth/jwt.middleware';
 import { requirePermission, enforceScopeForUser, resolveScope, getScopedStudentIds } from '../auth/rbac.middleware';
-import { validate } from '../middleware/validate.middleware';
+import { validate, validateStrict } from '../middleware/validate.middleware';
 import { logger } from '../utils/logger';
 import prisma from '../lib/prisma';
 import { hashToken, generateRawToken } from '../utils/token';
@@ -14,21 +14,63 @@ function paramId(req: Request): string {
   return Array.isArray(id) ? id[0] : id;
 }
 
+// ───── Shared profile helpers ─────
+
+export const SAFE_PROFILE_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  department: true,
+  year: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  role: { select: { id: true, name: true } },
+} as const;
+
+async function requireActiveUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (!req.user) {
+    res.status(401).json({ success: false, error: 'Authentication required.' });
+    return;
+  }
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: req.user.sub },
+    select: { status: true, roleId: true },
+  });
+
+  if (!dbUser) {
+    res.status(401).json({ success: false, error: 'Account not found.' });
+    return;
+  }
+
+  if (dbUser.status !== 'ACTIVE') {
+    res.status(401).json({ success: false, error: 'Account is not active.' });
+    return;
+  }
+
+  req.user.roleId = dbUser.roleId;
+  next();
+}
+
+function noCacheProfile(_req: Request, res: Response, next: NextFunction): void {
+  res.set('Cache-Control', 'no-store');
+  next();
+}
+
 // ───── GET /users/me — Read own profile ─────
 
 router.get(
   '/me',
   authenticateJwt,
+  requireActiveUser,
   requirePermission('users:read:own'),
+  noCacheProfile,
   async (req: Request, res: Response): Promise<void> => {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.sub },
-      select: {
-        id: true, name: true, email: true, phone: true,
-        department: true, year: true, status: true,
-        createdAt: true, updatedAt: true,
-        role: { select: { id: true, name: true } },
-      },
+      select: SAFE_PROFILE_SELECT,
     });
 
     if (!user) {
@@ -42,30 +84,73 @@ router.get(
 
 // ───── PATCH /users/me — Update own profile ─────
 
-const updateProfileSchema = Joi.object({
-  name: Joi.string().min(1).max(255),
-  phone: Joi.string().allow(null, ''),
-}).min(1);
+export const profileUpdateSchema = Joi.object({
+  name: Joi.string()
+    .trim()
+    .min(1)
+    .max(255)
+    .regex(/^[^\x00-\x1f\x7f]*$/, 'printable characters'),
+  phone: Joi.any().custom((value, helpers) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== 'string') return helpers.error('any.invalid');
+    if (value.trim() === '') return null;
+    if (value.length > 30) return helpers.error('any.invalid');
+    if (!/^\+?[\d\s()\-]+$/.test(value)) return helpers.error('any.invalid');
+    const digitCount = value.replace(/\D/g, '').length;
+    if (digitCount < 7 || digitCount > 15) return helpers.error('any.invalid');
+    return value;
+  }).messages({
+    'any.invalid': '"phone" must be a valid phone number (optional leading +, digits, spaces, parentheses, hyphens; 7–15 digits; max 30 characters) or null to clear',
+  }),
+}).min(1).messages({
+  'object.min': 'Request body must contain at least one of: name, phone',
+});
 
 router.patch(
   '/me',
   authenticateJwt,
+  requireActiveUser,
   requirePermission('users:update:self'),
-  validate(updateProfileSchema),
+  noCacheProfile,
+  validateStrict(profileUpdateSchema),
   async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user!.sub;
     const { name, phone } = req.body;
 
-    const user = await prisma.user.update({
-      where: { id: req.user!.sub },
-      data: { ...(name && { name }), ...(phone !== undefined && { phone }) },
-      select: {
-        id: true, name: true, email: true, phone: true,
-        department: true, year: true, status: true,
-        role: { select: { id: true, name: true } },
-      },
+    const oldUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, phone: true },
     });
 
-    res.status(200).json({ success: true, data: user });
+    if (!oldUser) {
+      res.status(404).json({ success: false, error: 'User not found.' });
+      return;
+    }
+
+    const updateData: { name?: string; phone?: string | null } = {};
+    if (name !== undefined) updateData.name = name;
+    if (phone !== undefined) updateData.phone = phone;
+
+    const [updatedUser] = await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+        select: SAFE_PROFILE_SELECT,
+      }),
+      prisma.auditLog.create({
+        data: {
+          userId,
+          entityType: 'User',
+          entityId: userId,
+          action: 'PROFILE_UPDATED',
+          oldValues: { name: oldUser.name, phone: oldUser.phone },
+          newValues: updateData,
+          ipAddress: req.ip,
+        },
+      }),
+    ]);
+
+    res.status(200).json({ success: true, data: updatedUser });
   },
 );
 
