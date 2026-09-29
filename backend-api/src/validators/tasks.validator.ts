@@ -8,8 +8,11 @@ export const createTaskSchema = Joi.object({
 
   batchIds: Joi.array().items(
     Joi.string().uuid().messages({ 'string.guid': 'Each batchId must be a valid UUID' })
-  ).min(1).required()
-    .messages({ 'array.min': 'At least one batchId is required' }),
+  ).min(1).unique().required()
+    .messages({
+      'array.min': 'At least one batchId is required',
+      'array.unique': 'batchIds must not contain duplicates',
+    }),
 
   isMandatory: Joi.boolean().optional().default(true),
 

@@ -14,7 +14,8 @@ function handleServiceError(err: unknown, res: Response, next: NextFunction) {
 
 export async function createTaskHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const scope: string = (req as any).resolvedScope || 'none';
+    const heldPermissions: Set<string> = (req as any).heldPermissions || new Set();
+    const scope = heldPermissions.has('tasks:create:any') ? 'any' : 'batch';
     const result = await createTask(req.body, req.user!.sub, scope);
     return sendSuccess(res, result, 201);
   } catch (err) {
