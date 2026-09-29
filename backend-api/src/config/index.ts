@@ -35,4 +35,10 @@ export const config = {
   seed: {
     testPassword: process.env.SEED_TEST_PASSWORD,
   },
+
+  googleDrive: {
+    clientEmail: process.env.GOOGLE_DRIVE_CLIENT_EMAIL || '',
+    privateKey: (process.env.GOOGLE_DRIVE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
+  },
 };
