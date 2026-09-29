@@ -13,10 +13,13 @@ import usersRoutes from './routes/users.routes';
 import assessmentRoutes from './routes/assessments.routes';
 import batchRoutes from './routes/batches.routes';
 import sessionRoutes from './routes/sessions.routes';
+import { closeQueues } from './jobs/queue';
+import { closeEmailTransporter } from './services/email.service';
 import attendanceRoutes from './routes/attendance.routes';
 import feedbackRoutes from './routes/feedback.routes';
 import mentorAssignmentRoutes from './routes/mentor-assignments.routes';
 import riskRoutes from './routes/risk.routes';
+import mentorAlertRoutes from './routes/mentor-alerts.routes';
 import proofRoutes from './routes/proofs.routes';
 import eventRoutes from './routes/events.routes';
 
@@ -47,15 +50,50 @@ app.use('/api/attendance', authenticateJwt, attendanceRoutes);
 app.use('/api/feedback', authenticateJwt, feedbackRoutes);
 app.use('/api/mentor-assignments', authenticateJwt, mentorAssignmentRoutes);
 app.use('/api/risk', authenticateJwt, riskRoutes);
+app.use('/api/mentor-alerts', authenticateJwt, mentorAlertRoutes);
 app.use('/api/events', authenticateJwt, eventRoutes);
 app.use('/api/proofs', authenticateJwt, proofRoutes);
 
 app.use(errorHandler);
 
 if (require.main === module) {
-  app.listen(config.port, () => {
+  // Import workers to start them (only in main process, not during tests)
+  import('./jobs/email.job');
+  import('./jobs/alert.job');
+  import('./jobs/weekly-report.job');
+
+  const server = app.listen(config.port, () => {
     logger.info(`Server running on port ${config.port} (${config.nodeEnv})`);
+    logger.info('BullMQ workers initialized');
   });
+
+  // Graceful shutdown
+  const shutdown = async (signal: string) => {
+    logger.info(`${signal} received, starting graceful shutdown`);
+
+    server.close(async () => {
+      logger.info('HTTP server closed');
+
+      try {
+        await closeQueues();
+        await closeEmailTransporter();
+        logger.info('All services closed');
+        process.exit(0);
+      } catch (error) {
+        logger.error('Error during shutdown', { error: (error as Error).message });
+        process.exit(1);
+      }
+    });
+
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+      logger.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 export default app;
