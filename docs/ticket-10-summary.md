@@ -221,7 +221,7 @@ This follows the exact same pattern as the existing providers:
 | 1 | Schema + migration + permissions | **Done** (this commit) |
 | 2 | Create & distribute task (API) | **Done** |
 | 3 | Edit task (API) | **Done** |
-| 4 | Trainer task list & details (API) | Not started |
+| 4 | Trainer task list & details (API) | **Done** |
 | 5 | Change deadline (API) | Not started |
 | 6 | Close / reopen / delete (API) | Not started |
 | 7 | Student my-tasks (API) | Not started |
@@ -403,6 +403,113 @@ This follows the exact same pattern as the existing providers:
 - isMandatory false→true backfills submissions for all students who don't have one yet
 - Existing submissions are always preserved regardless of changes
 - Notifications sent to all students with submissions on any edit
+
+---
+
+## Subtask 4: Trainer Task List & Details (API)
+
+### Files Changed
+
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `backend-api/src/services/tasks.service.ts` | Modified | Added `listTasks()` and `getTaskById()` — scope-filtered queries with pagination, progress counts, and detail includes |
+| `backend-api/src/controllers/tasks.controller.ts` | Modified | Added `listTasksHandler()` and `getTaskHandler()` — query param parsing, scope derivation from `heldPermissions` |
+| `backend-api/src/routes/tasks.routes.ts` | Modified | Added `GET /` and `GET /:id` routes with `requirePermission('tasks:read:batch', 'tasks:read:any')` |
+
+### Endpoints
+
+#### `GET /api/tasks` — List tasks (paginated)
+
+**Auth:** JWT required → `requirePermission('tasks:read:batch', 'tasks:read:any')`
+
+**Query parameters (all optional):**
+- `batchId` — Filter by batch UUID
+- `isMandatory` — `true` or `false`
+- `isInternal` — `true` or `false`
+- `deadlineType` — `FIXED`, `TENTATIVE`, `TBD`, `NONE`
+- `status` — `open` (closedAt is null) or `closed` (closedAt is set)
+- `search` — Case-insensitive title substring search
+- `page` — Page number (default 1)
+- `limit` — Items per page (default 20, max 100)
+
+**Scope behavior:**
+- `tasks:read:any` → sees all tasks (admin, faculty, coordinator)
+- `tasks:read:batch` → only tasks targeting batches the trainer is assigned to (BatchTrainer lookup)
+- If `batchId` filter is provided with batch scope, it naturally limits to that batch
+
+**Response (200):** Uses `sendPaginated` — first usage in the codebase (utility existed but was unused):
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "task-uuid",
+      "title": "Complete Chapter 5",
+      "isMandatory": true,
+      "isInternal": false,
+      "maxMarks": null,
+      "deadlineType": "FIXED",
+      "deadline": "2026-10-05T23:59:00.000Z",
+      "closedAt": null,
+      "createdBy": { "id": "...", "name": "...", "email": "..." },
+      "taskBatches": [{ "taskId": "...", "batchId": "...", "batch": { "id": "...", "name": "..." } }],
+      "submissionCount": 13,
+      "progressCounts": { "NOT_STARTED": 5, "IN_PROGRESS": 4, "ALMOST_COMPLETED": 2, "COMPLETED": 2 }
+    }
+  ],
+  "pagination": { "total": 42, "page": 1, "limit": 20, "pages": 3 }
+}
+```
+
+#### `GET /api/tasks/:id` — Task detail with submissions
+
+**Auth:** Same as list
+
+**Query parameters:**
+- `progress` — Filter submissions by progress status (`NOT_STARTED`, `IN_PROGRESS`, `ALMOST_COMPLETED`, `COMPLETED`)
+
+**Response (200):** Full task with all submissions (including student info and grader), deadline change history, and progress counts. Progress counts are always computed from all submissions, even when the submissions list is filtered.
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "task-uuid",
+    "title": "...",
+    "submissions": [
+      {
+        "id": "...",
+        "studentId": "...",
+        "student": { "id": "...", "name": "...", "email": "..." },
+        "progress": "IN_PROGRESS",
+        "marksAwarded": null,
+        "gradedBy": null,
+        "completedAt": null,
+        "isLate": null
+      }
+    ],
+    "deadlineChanges": [
+      {
+        "id": "...",
+        "oldDeadlineType": "NONE",
+        "newDeadlineType": "FIXED",
+        "changedBy": { "id": "...", "name": "..." },
+        "createdAt": "..."
+      }
+    ],
+    "submissionCount": 13,
+    "progressCounts": { "NOT_STARTED": 5, "IN_PROGRESS": 4, "ALMOST_COMPLETED": 2, "COMPLETED": 2 }
+  }
+}
+```
+
+**Design decisions:**
+- List returns summary with progress counts (no full submission arrays) — frontend-friendly for table rendering
+- Detail returns full submissions with student names/emails for the trainer's grading/review view
+- Pagination via `sendPaginated` gives the frontend `total`/`pages` for building page controls
+- Progress counts are always from all submissions (not just filtered ones) so the frontend can show status breakdown badges even when filtering
+- Deadline change history included in detail for trainer audit visibility
+- Scope check on detail happens after fetch (to include batch IDs in the check) — same pattern as updateTask
 
 ---
 

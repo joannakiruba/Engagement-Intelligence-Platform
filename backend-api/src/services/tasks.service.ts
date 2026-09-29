@@ -1,5 +1,5 @@
 import prisma from '../lib/prisma';
-import { DeadlineType, Prisma } from '@prisma/client';
+import { DeadlineType, Prisma, TaskProgress } from '@prisma/client';
 
 class ServiceError extends Error {
   constructor(
@@ -374,4 +374,161 @@ export async function updateTask(
   });
 
   return result;
+}
+
+interface ListTasksFilters {
+  batchId?: string;
+  isMandatory?: boolean;
+  isInternal?: boolean;
+  deadlineType?: DeadlineType;
+  status?: 'open' | 'closed';
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export async function listTasks(
+  filters: ListTasksFilters,
+  requesterId: string,
+  scope: string,
+) {
+  const where: Prisma.TaskWhereInput = {};
+
+  if (filters.batchId) {
+    where.taskBatches = { some: { batchId: filters.batchId } };
+  }
+
+  if (scope !== 'any' && !filters.batchId) {
+    const trainerBatches = await prisma.batchTrainer.findMany({
+      where: { trainerId: requesterId },
+      select: { batchId: true },
+    });
+    const trainerBatchIds = trainerBatches.map((tb) => tb.batchId);
+    where.taskBatches = { some: { batchId: { in: trainerBatchIds } } };
+  }
+
+  if (filters.isMandatory !== undefined) where.isMandatory = filters.isMandatory;
+  if (filters.isInternal !== undefined) where.isInternal = filters.isInternal;
+  if (filters.deadlineType) where.deadlineType = filters.deadlineType;
+
+  if (filters.status === 'open') {
+    where.closedAt = null;
+  } else if (filters.status === 'closed') {
+    where.closedAt = { not: null };
+  }
+
+  if (filters.search) {
+    where.title = { contains: filters.search, mode: 'insensitive' };
+  }
+
+  const page = filters.page ?? 1;
+  const limit = filters.limit ?? 20;
+  const skip = (page - 1) * limit;
+
+  const [tasks, total] = await Promise.all([
+    prisma.task.findMany({
+      where,
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        taskBatches: {
+          include: { batch: { select: { id: true, name: true } } },
+        },
+        submissions: {
+          select: { progress: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.task.count({ where }),
+  ]);
+
+  const data = tasks.map((task) => {
+    const progressCounts: Record<string, number> = {
+      NOT_STARTED: 0,
+      IN_PROGRESS: 0,
+      ALMOST_COMPLETED: 0,
+      COMPLETED: 0,
+    };
+    for (const sub of task.submissions) {
+      progressCounts[sub.progress] = (progressCounts[sub.progress] || 0) + 1;
+    }
+
+    const { submissions, ...taskFields } = task;
+    return {
+      ...taskFields,
+      submissionCount: submissions.length,
+      progressCounts,
+    };
+  });
+
+  return { data, total, page, limit };
+}
+
+export async function getTaskById(
+  taskId: string,
+  requesterId: string,
+  scope: string,
+  progressFilter?: TaskProgress,
+) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      taskBatches: {
+        include: { batch: { select: { id: true, name: true } } },
+      },
+      submissions: {
+        where: progressFilter ? { progress: progressFilter } : undefined,
+        include: {
+          student: { select: { id: true, name: true, email: true } },
+          gradedBy: { select: { id: true, name: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+      },
+      deadlineChanges: {
+        include: { changedBy: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+
+  if (!task) {
+    throw new ServiceError('Task not found', 404);
+  }
+
+  if (scope !== 'any') {
+    const taskBatchIds = task.taskBatches.map((tb) => tb.batchId);
+    const trainerBatch = await prisma.batchTrainer.findFirst({
+      where: { trainerId: requesterId, batchId: { in: taskBatchIds } },
+    });
+    if (!trainerBatch) {
+      throw new ServiceError('You are not a trainer for any of this task\'s batches', 403);
+    }
+  }
+
+  const progressCounts: Record<string, number> = {
+    NOT_STARTED: 0,
+    IN_PROGRESS: 0,
+    ALMOST_COMPLETED: 0,
+    COMPLETED: 0,
+  };
+
+  const allSubmissions = progressFilter
+    ? await prisma.taskSubmission.findMany({
+        where: { taskId },
+        select: { progress: true },
+      })
+    : task.submissions;
+
+  for (const sub of allSubmissions) {
+    progressCounts[sub.progress] = (progressCounts[sub.progress] || 0) + 1;
+  }
+
+  return {
+    ...task,
+    submissionCount: allSubmissions.length,
+    progressCounts,
+  };
 }
