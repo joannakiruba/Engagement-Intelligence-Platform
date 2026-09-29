@@ -223,12 +223,12 @@ This follows the exact same pattern as the existing providers:
 | 3 | Edit task (API) | **Done** |
 | 4 | Trainer task list & details (API) | **Done** |
 | 5 | Change deadline (API) | **Done** |
-| 6 | Close / reopen / delete (API) | Not started |
-| 7 | Student my-tasks (API) | Not started |
-| 8 | Student progress update (API) | Not started |
-| 9 | Interested + manual add (API) | Not started |
-| 10 | Marks — set/change/export (API) | Not started |
-| 11 | Risk engine query + notification seam | Not started |
+| 6 | Close / reopen / delete (API) | **Done** |
+| 7 | Student my-tasks (API) | **Done** |
+| 8 | Student progress update (API) | **Done** |
+| 9 | Interested + manual add (API) | **Done** |
+| 10 | Marks — set/change/export (API) | **Done** |
+| 11 | Risk engine query + notification seam | **Done** (provider from Subtask 1) |
 
 ---
 
@@ -567,6 +567,113 @@ When a batch-scoped trainer provided a `batchId` query parameter, the scope rest
 **Fix:** Restructured the filter logic to always validate `batchId` against the trainer's assigned batches when scope is `batch`. If the trainer isn't assigned to the requested batch, an empty result is returned (not 403, to avoid leaking batch existence).
 
 Also fixed: duplicate import of `sendPaginated` in the controller (merged into single import line).
+
+---
+
+## Subtask 6: Close / Reopen / Delete
+
+### Endpoints
+
+**`POST /api/tasks/:id/close`** — Close a task (hides from students, prevents progress changes)
+- Auth: `tasks:update:batch` or `tasks:update:any`
+- Returns 409 if already closed
+- Sends TASK_UPDATE notification to all students
+
+**`POST /api/tasks/:id/reopen`** — Reopen a closed task
+- Auth: `tasks:update:batch` or `tasks:update:any`
+- Returns 409 if not closed
+- Sends TASK_UPDATE notification to all students
+
+**`DELETE /api/tasks/:id`** — Delete a task permanently
+- Auth: `tasks:delete:batch` or `tasks:delete:any`
+- **Safety guard:** Returns 409 if any student has progress beyond NOT_STARTED — must close instead
+- Cascading deletes handle TaskBatch, TaskSubmission, TaskDeadlineChange via FK CASCADE
+
+### Design decisions
+- Close/reopen are POST actions (not PATCH) — they're state transitions, not field updates
+- Delete is destructive and only allowed when no student has started work — prevents data loss
+- Uses shared `checkTaskTrainerAuth` helper for scope validation
+
+---
+
+## Subtask 7: Student My-Tasks (`GET /api/tasks/my-tasks`)
+
+### Endpoint
+
+**`GET /api/tasks/my-tasks`** — List tasks visible to the authenticated student
+
+- Auth: `tasks:read:own` (STUDENT role)
+- Filters: `batchId`, `progress`, `isMandatory`, `status` (open/closed, defaults to open)
+- Returns task list with the student's own submission (progress, marks, completedAt, isLate)
+- Hides `maxMarks` for non-internal tasks
+- No deadline history (students don't see it per design doc)
+- Route placed before `/:id` to avoid Express matching "my-tasks" as an ID
+
+---
+
+## Subtask 8: Student Progress Update (`PATCH /api/tasks/:id/progress`)
+
+### Endpoint
+
+**`PATCH /api/tasks/:id/progress`** — Student updates their own progress
+
+- Auth: `tasks:update:own` (STUDENT role)
+- Body: `{ "progress": "IN_PROGRESS" | "ALMOST_COMPLETED" | "COMPLETED" | "NOT_STARTED" }`
+- When moving TO `COMPLETED`: sets `completedAt` to now, computes `isLate` (if FIXED deadline)
+- When moving FROM `COMPLETED` back: clears `completedAt` and `isLate`
+- For optional tasks: creates a submission row if one doesn't exist
+- Returns 409 if task is closed
+
+---
+
+## Subtask 9: Interested + Manual Add
+
+### Endpoints
+
+**`POST /api/tasks/:id/interested`** — Student toggles interest on an optional task
+- Auth: `tasks:update:own`
+- Only for non-mandatory tasks (400 if mandatory)
+- Creates submission if needed, toggles `isInterested` boolean
+- Returns 409 if task is closed
+
+**`POST /api/tasks/:id/students`** — Trainer manually adds a student to a task
+- Auth: `tasks:update:batch` or `tasks:update:any`
+- Body: `{ "studentId": "uuid" }`
+- Validates student is in one of the task's batches (400 if not)
+- Returns 409 if student already has a submission
+
+---
+
+## Subtask 10: Marks — Set / Change / Export
+
+### Endpoints
+
+**`PUT /api/tasks/:id/marks`** — Set/change marks for a single student
+- Auth: `tasks:grade:batch` or `tasks:grade:any`
+- Body: `{ "studentId": "uuid", "marksAwarded": 8.5 }` (or `null` to clear)
+- Validates: task is internal, marks ≤ maxMarks, submission exists
+- Sets `gradedById` to the grader; clears it when marks set to null
+
+**`POST /api/tasks/:id/marks/bulk`** — Bulk grade multiple students
+- Auth: `tasks:grade:batch` or `tasks:grade:any`
+- Body: `{ "entries": [{ "studentId": "...", "marksAwarded": 9 }, ...] }`
+- Per-entry error handling (no transaction — partial success allowed)
+- Returns 207 if any errors, 200 if all succeed
+- Same pattern as assessment `bulkUploadScores`
+
+**`GET /api/tasks/:id/marks/export`** — Export all marks for a task (JSON)
+- Auth: `tasks:grade:batch` or `tasks:grade:any`
+- Returns task info + all submissions with student name/email, progress, marks, grader
+- Sorted by student name (frontend can render as table or convert to CSV)
+
+---
+
+## Subtask 11: Risk Engine Query + Notification Seam
+
+Already implemented in Subtask 1 via `backend-api/src/providers/task.provider.ts`:
+- `getTaskStats(studentId, batchId)` → `{ missedCount, lateCount, totalMandatory }`
+- Notification dispatch via `notifyStudents()` helper in the service (TASK_UPDATE type)
+- Wiring into `feature-builder.ts` / `rule-engine.ts` is the risk-engine teammate's responsibility
 
 ---
 

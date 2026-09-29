@@ -115,3 +115,30 @@ export const changeDeadlineSchema = Joi.object({
 
   return value;
 });
+
+export const updateProgressSchema = Joi.object({
+  progress: Joi.string()
+    .valid('NOT_STARTED', 'IN_PROGRESS', 'ALMOST_COMPLETED', 'COMPLETED')
+    .required(),
+});
+
+export const addStudentSchema = Joi.object({
+  studentId: Joi.string().uuid().required()
+    .messages({ 'string.guid': 'studentId must be a valid UUID' }),
+});
+
+export const setMarksSchema = Joi.object({
+  studentId: Joi.string().uuid().required()
+    .messages({ 'string.guid': 'studentId must be a valid UUID' }),
+  marksAwarded: Joi.number().min(0).allow(null).required()
+    .messages({ 'number.min': 'marksAwarded cannot be negative' }),
+});
+
+export const bulkSetMarksSchema = Joi.object({
+  entries: Joi.array().items(
+    Joi.object({
+      studentId: Joi.string().uuid().required(),
+      marksAwarded: Joi.number().min(0).allow(null).required(),
+    }),
+  ).min(1).required(),
+});

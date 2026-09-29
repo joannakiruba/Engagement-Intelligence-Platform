@@ -640,3 +640,445 @@ export async function changeDeadline(
 
   return result;
 }
+
+async function checkTaskTrainerAuth(
+  userId: string,
+  scope: string,
+  existing: { taskBatches: { batchId: string }[] },
+) {
+  if (scope !== 'any') {
+    const batchIds = existing.taskBatches.map((tb) => tb.batchId);
+    const trainerBatch = await prisma.batchTrainer.findFirst({
+      where: { trainerId: userId, batchId: { in: batchIds } },
+    });
+    if (!trainerBatch) {
+      throw new ServiceError('You are not a trainer for any of this task\'s batches', 403);
+    }
+  }
+}
+
+export async function closeTask(taskId: string, userId: string, scope: string) {
+  const existing = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { taskBatches: { select: { batchId: true } } },
+  });
+
+  if (!existing) throw new ServiceError('Task not found', 404);
+  if (existing.closedAt) throw new ServiceError('Task is already closed', 409);
+  await checkTaskTrainerAuth(userId, scope, existing);
+
+  const task = await prisma.$transaction(async (tx) => {
+    const updated = await tx.task.update({
+      where: { id: taskId },
+      data: { closedAt: new Date() },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        taskBatches: { include: { batch: { select: { id: true, name: true } } } },
+      },
+    });
+
+    await notifyStudents(tx, taskId, updated.title, 'This task has been closed');
+    return updated;
+  });
+
+  return task;
+}
+
+export async function reopenTask(taskId: string, userId: string, scope: string) {
+  const existing = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { taskBatches: { select: { batchId: true } } },
+  });
+
+  if (!existing) throw new ServiceError('Task not found', 404);
+  if (!existing.closedAt) throw new ServiceError('Task is not closed', 409);
+  await checkTaskTrainerAuth(userId, scope, existing);
+
+  const task = await prisma.$transaction(async (tx) => {
+    const updated = await tx.task.update({
+      where: { id: taskId },
+      data: { closedAt: null },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        taskBatches: { include: { batch: { select: { id: true, name: true } } } },
+      },
+    });
+
+    await notifyStudents(tx, taskId, updated.title, 'This task has been reopened');
+    return updated;
+  });
+
+  return task;
+}
+
+export async function deleteTask(taskId: string, userId: string, scope: string) {
+  const existing = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { taskBatches: { select: { batchId: true } } },
+  });
+
+  if (!existing) throw new ServiceError('Task not found', 404);
+  await checkTaskTrainerAuth(userId, scope, existing);
+
+  const hasProgress = await prisma.taskSubmission.findFirst({
+    where: { taskId, progress: { not: 'NOT_STARTED' } },
+  });
+
+  if (hasProgress) {
+    throw new ServiceError(
+      'Cannot delete task: students have started working on it. Close it instead.',
+      409,
+    );
+  }
+
+  await prisma.task.delete({ where: { id: taskId } });
+}
+
+interface StudentTaskFilters {
+  batchId?: string;
+  progress?: TaskProgress;
+  isMandatory?: boolean;
+  status?: 'open' | 'closed';
+}
+
+export async function getStudentTasks(studentId: string, filters: StudentTaskFilters) {
+  const memberships = await prisma.batchMember.findMany({
+    where: { studentId },
+    select: { batchId: true },
+  });
+  const studentBatchIds = memberships.map((m) => m.batchId);
+
+  if (studentBatchIds.length === 0) {
+    return [];
+  }
+
+  const batchFilter = filters.batchId && studentBatchIds.includes(filters.batchId)
+    ? [filters.batchId]
+    : studentBatchIds;
+
+  const taskWhere: Prisma.TaskWhereInput = {
+    taskBatches: { some: { batchId: { in: batchFilter } } },
+  };
+
+  if (filters.isMandatory !== undefined) taskWhere.isMandatory = filters.isMandatory;
+  if (filters.status === 'open') taskWhere.closedAt = null;
+  else if (filters.status === 'closed') taskWhere.closedAt = { not: null };
+  else taskWhere.closedAt = null;
+
+  const tasks = await prisma.task.findMany({
+    where: taskWhere,
+    include: {
+      taskBatches: {
+        where: { batchId: { in: batchFilter } },
+        include: { batch: { select: { id: true, name: true } } },
+      },
+      submissions: {
+        where: { studentId },
+        select: {
+          id: true,
+          progress: true,
+          isInterested: true,
+          completedAt: true,
+          isLate: true,
+          marksAwarded: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const result = tasks.map((task) => {
+    const submission = task.submissions[0] || null;
+    return {
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      isMandatory: task.isMandatory,
+      isInternal: task.isInternal,
+      maxMarks: task.isInternal ? task.maxMarks : undefined,
+      deadlineType: task.deadlineType,
+      deadline: task.deadline,
+      deadlineNote: task.deadlineNote,
+      batches: task.taskBatches.map((tb) => ({ id: tb.batchId, name: tb.batch.name })),
+      submission,
+      createdAt: task.createdAt,
+    };
+  });
+
+  if (filters.progress) {
+    return result.filter((t) => {
+      if (!t.submission) return filters.progress === 'NOT_STARTED';
+      return t.submission.progress === filters.progress;
+    });
+  }
+
+  return result;
+}
+
+export async function updateStudentProgress(
+  taskId: string,
+  studentId: string,
+  progress: TaskProgress,
+) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { id: true, closedAt: true, deadlineType: true, deadline: true, isMandatory: true },
+  });
+
+  if (!task) throw new ServiceError('Task not found', 404);
+  if (task.closedAt) throw new ServiceError('Cannot update progress on a closed task', 409);
+
+  let submission = await prisma.taskSubmission.findUnique({
+    where: { taskId_studentId: { taskId, studentId } },
+  });
+
+  if (!submission && task.isMandatory) {
+    throw new ServiceError('Submission record missing for mandatory task', 500);
+  }
+
+  if (!submission) {
+    submission = await prisma.taskSubmission.create({
+      data: { taskId, studentId, progress },
+    });
+  }
+
+  const now = new Date();
+  let completedAt = submission.completedAt;
+  let isLate = submission.isLate;
+
+  if (progress === 'COMPLETED' && submission.progress !== 'COMPLETED') {
+    completedAt = now;
+    isLate = task.deadlineType === 'FIXED' && task.deadline ? now > task.deadline : null;
+  } else if (progress !== 'COMPLETED' && submission.progress === 'COMPLETED') {
+    completedAt = null;
+    isLate = null;
+  }
+
+  const updated = await prisma.taskSubmission.update({
+    where: { id: submission.id },
+    data: { progress, completedAt, isLate },
+    include: {
+      task: { select: { id: true, title: true, deadlineType: true, deadline: true } },
+    },
+  });
+
+  return updated;
+}
+
+export async function toggleInterested(taskId: string, studentId: string) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { id: true, closedAt: true, isMandatory: true },
+  });
+
+  if (!task) throw new ServiceError('Task not found', 404);
+  if (task.closedAt) throw new ServiceError('Cannot express interest in a closed task', 409);
+  if (task.isMandatory) throw new ServiceError('Cannot toggle interest on a mandatory task', 400);
+
+  let submission = await prisma.taskSubmission.findUnique({
+    where: { taskId_studentId: { taskId, studentId } },
+  });
+
+  if (!submission) {
+    submission = await prisma.taskSubmission.create({
+      data: { taskId, studentId, isInterested: true },
+    });
+    return submission;
+  }
+
+  const updated = await prisma.taskSubmission.update({
+    where: { id: submission.id },
+    data: { isInterested: !submission.isInterested },
+  });
+
+  return updated;
+}
+
+export async function addStudentToTask(
+  taskId: string,
+  studentId: string,
+  addedById: string,
+  scope: string,
+) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { taskBatches: { select: { batchId: true } } },
+  });
+
+  if (!task) throw new ServiceError('Task not found', 404);
+  if (task.closedAt) throw new ServiceError('Cannot add student to a closed task', 409);
+
+  await checkTaskTrainerAuth(addedById, scope, task);
+
+  const taskBatchIds = task.taskBatches.map((tb) => tb.batchId);
+  const membership = await prisma.batchMember.findFirst({
+    where: { studentId, batchId: { in: taskBatchIds } },
+  });
+  if (!membership) {
+    throw new ServiceError('Student is not a member of any batch this task targets', 400);
+  }
+
+  const existing = await prisma.taskSubmission.findUnique({
+    where: { taskId_studentId: { taskId, studentId } },
+  });
+  if (existing) {
+    throw new ServiceError('Student already has a submission for this task', 409);
+  }
+
+  const submission = await prisma.taskSubmission.create({
+    data: { taskId, studentId },
+    include: {
+      student: { select: { id: true, name: true, email: true } },
+    },
+  });
+
+  return submission;
+}
+
+interface SetMarksInput {
+  studentId: string;
+  marksAwarded: number | null;
+}
+
+export async function setMarks(
+  taskId: string,
+  input: SetMarksInput,
+  gradedById: string,
+  scope: string,
+) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { taskBatches: { select: { batchId: true } } },
+  });
+
+  if (!task) throw new ServiceError('Task not found', 404);
+  if (!task.isInternal) throw new ServiceError('Cannot set marks on a non-internal task', 400);
+
+  await checkTaskTrainerAuth(gradedById, scope, task);
+
+  if (input.marksAwarded !== null) {
+    if (input.marksAwarded < 0) {
+      throw new ServiceError('marksAwarded cannot be negative', 400);
+    }
+    if (task.maxMarks !== null && input.marksAwarded > task.maxMarks) {
+      throw new ServiceError(`marksAwarded cannot exceed maxMarks (${task.maxMarks})`, 400);
+    }
+  }
+
+  const submission = await prisma.taskSubmission.findUnique({
+    where: { taskId_studentId: { taskId, studentId: input.studentId } },
+  });
+  if (!submission) {
+    throw new ServiceError('Student does not have a submission for this task', 404);
+  }
+
+  const updated = await prisma.taskSubmission.update({
+    where: { id: submission.id },
+    data: {
+      marksAwarded: input.marksAwarded,
+      gradedById: input.marksAwarded !== null ? gradedById : null,
+    },
+    include: {
+      student: { select: { id: true, name: true, email: true } },
+      gradedBy: { select: { id: true, name: true } },
+    },
+  });
+
+  return updated;
+}
+
+export async function bulkSetMarks(
+  taskId: string,
+  entries: SetMarksInput[],
+  gradedById: string,
+  scope: string,
+) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { taskBatches: { select: { batchId: true } } },
+  });
+
+  if (!task) throw new ServiceError('Task not found', 404);
+  if (!task.isInternal) throw new ServiceError('Cannot set marks on a non-internal task', 400);
+
+  await checkTaskTrainerAuth(gradedById, scope, task);
+
+  const results: { studentId: string; status: 'updated' | 'error'; error?: string }[] = [];
+
+  for (const entry of entries) {
+    try {
+      if (entry.marksAwarded !== null) {
+        if (entry.marksAwarded < 0) throw new Error('marksAwarded cannot be negative');
+        if (task.maxMarks !== null && entry.marksAwarded > task.maxMarks) {
+          throw new Error(`marksAwarded cannot exceed maxMarks (${task.maxMarks})`);
+        }
+      }
+
+      const submission = await prisma.taskSubmission.findUnique({
+        where: { taskId_studentId: { taskId, studentId: entry.studentId } },
+      });
+      if (!submission) throw new Error('No submission found');
+
+      await prisma.taskSubmission.update({
+        where: { id: submission.id },
+        data: {
+          marksAwarded: entry.marksAwarded,
+          gradedById: entry.marksAwarded !== null ? gradedById : null,
+        },
+      });
+
+      results.push({ studentId: entry.studentId, status: 'updated' });
+    } catch (err: any) {
+      results.push({ studentId: entry.studentId, status: 'error', error: err.message });
+    }
+  }
+
+  return {
+    total: entries.length,
+    updated: results.filter((r) => r.status === 'updated').length,
+    errors: results.filter((r) => r.status === 'error').length,
+    details: results,
+  };
+}
+
+export async function exportMarks(taskId: string, userId: string, scope: string) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { taskBatches: { select: { batchId: true } } },
+  });
+
+  if (!task) throw new ServiceError('Task not found', 404);
+  if (!task.isInternal) throw new ServiceError('Cannot export marks for a non-internal task', 400);
+
+  await checkTaskTrainerAuth(userId, scope, task);
+
+  const submissions = await prisma.taskSubmission.findMany({
+    where: { taskId },
+    include: {
+      student: { select: { id: true, name: true, email: true } },
+      gradedBy: { select: { id: true, name: true } },
+    },
+    orderBy: { student: { name: 'asc' } },
+  });
+
+  return {
+    task: {
+      id: task.id,
+      title: task.title,
+      maxMarks: task.maxMarks,
+      isInternal: task.isInternal,
+    },
+    submissions: submissions.map((s) => ({
+      studentId: s.studentId,
+      studentName: s.student.name,
+      studentEmail: s.student.email,
+      progress: s.progress,
+      marksAwarded: s.marksAwarded,
+      gradedBy: s.gradedBy ? s.gradedBy.name : null,
+      completedAt: s.completedAt,
+      isLate: s.isLate,
+    })),
+  };
+}
