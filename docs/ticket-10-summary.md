@@ -222,7 +222,7 @@ This follows the exact same pattern as the existing providers:
 | 2 | Create & distribute task (API) | **Done** |
 | 3 | Edit task (API) | **Done** |
 | 4 | Trainer task list & details (API) | **Done** |
-| 5 | Change deadline (API) | Not started |
+| 5 | Change deadline (API) | **Done** |
 | 6 | Close / reopen / delete (API) | Not started |
 | 7 | Student my-tasks (API) | Not started |
 | 8 | Student progress update (API) | Not started |
@@ -510,6 +510,63 @@ This follows the exact same pattern as the existing providers:
 - Progress counts are always from all submissions (not just filtered ones) so the frontend can show status breakdown badges even when filtering
 - Deadline change history included in detail for trainer audit visibility
 - Scope check on detail happens after fetch (to include batch IDs in the check) — same pattern as updateTask
+
+---
+
+## Subtask 5: Change Deadline (`PATCH /api/tasks/:id/deadline`)
+
+### Files Changed
+
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `backend-api/src/validators/tasks.validator.ts` | Modified | Added `changeDeadlineSchema` — validates deadlineType, deadline (FIXED requires future), deadlineNote (TENTATIVE/TBD only), optional reason |
+| `backend-api/src/services/tasks.service.ts` | Modified | Added `changeDeadline()` — audit trail, isLate recomputation, student notifications |
+| `backend-api/src/controllers/tasks.controller.ts` | Modified | Added `changeDeadlineHandler()` with `tasks:update:any`/`tasks:update:batch` scope check |
+| `backend-api/src/routes/tasks.routes.ts` | Modified | Added `PATCH /:id/deadline` route |
+
+### Endpoint
+
+**`PATCH /api/tasks/:id/deadline`** — Change a task's deadline
+
+**Auth:** JWT required → `requirePermission('tasks:update:batch', 'tasks:update:any')`
+
+**Request body:**
+```json
+{
+  "deadlineType": "FIXED",
+  "deadline": "2026-11-01T23:59:00.000Z",
+  "deadlineNote": null,
+  "reason": "Extended by one week due to holiday"
+}
+```
+
+**Service logic:**
+1. Fetch task (404 if not found, 409 if closed)
+2. Scope-based trainer auth (same pattern as updateTask)
+3. In a single `$transaction`:
+   - Create TaskDeadlineChange audit record (old → new type + deadline + reason)
+   - Update task's deadlineType, deadline, deadlineNote
+   - If new type is FIXED: recompute `isLate` on all COMPLETED submissions by comparing `completedAt` against new deadline
+   - If new type is NOT FIXED: clear `isLate` to null on all submissions (no deadline to compare against)
+   - Send TASK_UPDATE notification to all students with submissions
+
+**Design decisions:**
+- Separate endpoint (not part of general PUT) because deadline changes have special audit + recomputation logic
+- Every deadline change is logged in TaskDeadlineChange with old/new values and optional reason
+- `isLate` is recomputed in the same transaction — never stale after deadline changes
+- When switching away from FIXED, `isLate` is cleared (null) since there's no enforceable deadline
+
+---
+
+## Mid-implementation Bug Fix (Post-Review)
+
+**Bug found: `listTasks` auth bypass via batchId filter**
+
+When a batch-scoped trainer provided a `batchId` query parameter, the scope restriction was skipped because the condition was `scope !== 'any' && !filters.batchId`. If `batchId` was provided, the trainer batch check was bypassed, allowing them to see tasks for batches they don't train.
+
+**Fix:** Restructured the filter logic to always validate `batchId` against the trainer's assigned batches when scope is `batch`. If the trainer isn't assigned to the requested batch, an empty result is returned (not 403, to avoid leaking batch existence).
+
+Also fixed: duplicate import of `sendPaginated` in the controller (merged into single import line).
 
 ---
 

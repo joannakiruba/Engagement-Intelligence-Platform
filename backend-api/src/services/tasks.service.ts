@@ -394,17 +394,23 @@ export async function listTasks(
 ) {
   const where: Prisma.TaskWhereInput = {};
 
-  if (filters.batchId) {
-    where.taskBatches = { some: { batchId: filters.batchId } };
-  }
-
-  if (scope !== 'any' && !filters.batchId) {
+  if (scope !== 'any') {
     const trainerBatches = await prisma.batchTrainer.findMany({
       where: { trainerId: requesterId },
       select: { batchId: true },
     });
     const trainerBatchIds = trainerBatches.map((tb) => tb.batchId);
-    where.taskBatches = { some: { batchId: { in: trainerBatchIds } } };
+
+    if (filters.batchId) {
+      if (!trainerBatchIds.includes(filters.batchId)) {
+        return { data: [], total: 0, page: filters.page ?? 1, limit: filters.limit ?? 20 };
+      }
+      where.taskBatches = { some: { batchId: filters.batchId } };
+    } else {
+      where.taskBatches = { some: { batchId: { in: trainerBatchIds } } };
+    }
+  } else if (filters.batchId) {
+    where.taskBatches = { some: { batchId: filters.batchId } };
   }
 
   if (filters.isMandatory !== undefined) where.isMandatory = filters.isMandatory;

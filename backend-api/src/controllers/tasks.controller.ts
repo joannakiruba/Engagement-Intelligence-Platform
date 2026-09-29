@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { sendSuccess, sendError } from '../utils/response';
+import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import { ServiceError, createTask, updateTask, listTasks, getTaskById, changeDeadline } from '../services/tasks.service';
-import { sendPaginated } from '../utils/response';
 import { DeadlineType, TaskProgress } from '@prisma/client';
 
 function handleServiceError(err: unknown, res: Response, next: NextFunction) {
