@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { sendSuccess, sendError } from '../utils/response';
-import { ServiceError, createTask } from '../services/tasks.service';
+import { ServiceError, createTask, updateTask } from '../services/tasks.service';
 
 function handleServiceError(err: unknown, res: Response, next: NextFunction) {
   if (
@@ -18,6 +18,17 @@ export async function createTaskHandler(req: Request, res: Response, next: NextF
     const scope = heldPermissions.has('tasks:create:any') ? 'any' : 'batch';
     const result = await createTask(req.body, req.user!.sub, scope);
     return sendSuccess(res, result, 201);
+  } catch (err) {
+    return handleServiceError(err, res, next);
+  }
+}
+
+export async function updateTaskHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const heldPermissions: Set<string> = (req as any).heldPermissions || new Set();
+    const scope = heldPermissions.has('tasks:update:any') ? 'any' : 'batch';
+    const result = await updateTask(String(req.params.id), req.body, req.user!.sub, scope);
+    return sendSuccess(res, result);
   } catch (err) {
     return handleServiceError(err, res, next);
   }

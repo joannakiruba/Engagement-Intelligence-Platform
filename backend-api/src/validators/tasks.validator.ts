@@ -1,5 +1,31 @@
 import Joi from 'joi';
 
+export const updateTaskSchema = Joi.object({
+  title: Joi.string().min(1).optional(),
+
+  description: Joi.string().allow('', null).optional(),
+
+  isMandatory: Joi.boolean().optional(),
+
+  isInternal: Joi.boolean().optional(),
+
+  maxMarks: Joi.number().positive().allow(null).optional()
+    .messages({ 'number.positive': 'maxMarks must be positive' }),
+
+  addBatchIds: Joi.array().items(
+    Joi.string().uuid().messages({ 'string.guid': 'Each batchId must be a valid UUID' })
+  ).unique().optional()
+    .messages({ 'array.unique': 'addBatchIds must not contain duplicates' }),
+}).custom((value, helpers) => {
+  if (value.isInternal === true && value.maxMarks === undefined) {
+    // maxMarks not provided — will be validated in service against existing value
+  }
+  if (value.isInternal === false && value.maxMarks !== undefined && value.maxMarks !== null) {
+    return helpers.message({ custom: 'maxMarks is not allowed when isInternal is false' });
+  }
+  return value;
+}).min(1).messages({ 'object.min': 'At least one field must be provided' });
+
 export const createTaskSchema = Joi.object({
   title: Joi.string().min(1).required()
     .messages({ 'string.empty': 'Title is required' }),

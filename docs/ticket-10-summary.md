@@ -220,7 +220,7 @@ This follows the exact same pattern as the existing providers:
 |---|---------|--------|
 | 1 | Schema + migration + permissions | **Done** (this commit) |
 | 2 | Create & distribute task (API) | **Done** |
-| 3 | Edit task (API) | Not started |
+| 3 | Edit task (API) | **Done** |
 | 4 | Trainer task list & details (API) | Not started |
 | 5 | Change deadline (API) | Not started |
 | 6 | Close / reopen / delete (API) | Not started |
@@ -312,6 +312,97 @@ This follows the exact same pattern as the existing providers:
 - `createdById` from JWT (`req.user.sub`), never from request body
 - Initial deadline logged in TaskDeadlineChange (old=NONE → new=whatever was chosen)
 - Scope-based auth: trainers must be BatchTrainer for every batchId; admin/any scope skips check
+
+---
+
+## Subtask 3: Edit Task (`PUT /api/tasks/:id`)
+
+### Files Changed
+
+| File | Change Type | Description |
+|------|-------------|-------------|
+| `backend-api/src/validators/tasks.validator.ts` | Modified | Added `updateTaskSchema` — optional fields with cross-field validation for isInternal↔maxMarks, `.unique()` on addBatchIds, `.min(1)` requiring at least one field |
+| `backend-api/src/services/tasks.service.ts` | Modified | Added `updateTask()` function and `notifyStudents()` helper — validates task exists and not closed, scope-based trainer auth, guards against data integrity issues, atomic transaction |
+| `backend-api/src/controllers/tasks.controller.ts` | Modified | Added `updateTaskHandler()` — extracts scope from `heldPermissions.has('tasks:update:any')`, passes taskId from `req.params.id` |
+| `backend-api/src/routes/tasks.routes.ts` | Modified | Added `PUT /:id` route with requirePermission + validate + updateTaskHandler |
+
+### Endpoint
+
+**`PUT /api/tasks/:id`** — Edit an existing task
+
+**Auth:** JWT required → `requirePermission('tasks:update:batch', 'tasks:update:any')`
+
+**Important:** No `resolveScope` middleware — scope is derived directly from `heldPermissions.has('tasks:update:any')` in the controller. See "resolveScope bypass" note in Subtask 2.
+
+**Request body (all fields optional, min 1 required):**
+```json
+{
+  "title": "Updated Title",
+  "description": "Updated description",
+  "isMandatory": true,
+  "isInternal": true,
+  "maxMarks": 50,
+  "addBatchIds": ["uuid-3"]
+}
+```
+
+**Validation rules (Joi + custom):**
+- `title`: optional, non-empty string
+- `description`: optional, allows empty string and null
+- `isMandatory`: optional boolean
+- `isInternal`: optional boolean
+- `maxMarks`: optional positive number or null
+- `addBatchIds`: optional array of UUIDs with `.unique()`
+- Cross-field: if `isInternal=false` and `maxMarks` is provided (non-null), rejected
+- At least one field must be present (`.min(1)`)
+
+**Service logic:**
+1. Fetch existing task with taskBatches (404 if not found)
+2. Reject if task is closed (`closedAt` is set → 409)
+3. If scope is `batch`, check that updater is a BatchTrainer for at least one of the task's existing batches (403 if not)
+4. **isInternal toggle guards:**
+   - If setting `isInternal=true`: maxMarks must be present or already set on the task (400 if missing)
+   - If setting `isInternal=false`: check if any student has `marksAwarded` — reject with 409 if so (must remove marks first)
+5. **maxMarks lowering guard:** If lowering maxMarks below current value, check if any student's `marksAwarded` exceeds the new max — reject with 409 if so
+6. **addBatchIds processing:**
+   - Filter out batch IDs already on the task (idempotent)
+   - Validate new batch IDs exist (404 if any missing)
+   - If scope is `batch`, check BatchTrainer auth for new batches (403 if unauthorized)
+7. In a single Prisma `$transaction`:
+   - Update task fields
+   - If `isInternal` set to false: clear maxMarks to null
+   - Create TaskBatch rows for new batches
+   - If task is mandatory (resolved): bulk-create TaskSubmission rows for students in new batches (deduplicated against existing submissions)
+   - If `isMandatory` toggled false→true: backfill TaskSubmission rows for all students across all batches (deduplicated)
+   - Send TASK_UPDATE notifications to all students with submissions (describes what changed)
+8. Return full updated task with batches and submissions
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "task-uuid",
+    "title": "Updated Title",
+    "isMandatory": true,
+    "isInternal": true,
+    "maxMarks": 50,
+    "createdBy": { "id": "...", "name": "...", "email": "..." },
+    "taskBatches": [...],
+    "submissions": [...]
+  }
+}
+```
+
+**Design decisions applied:**
+- Closed tasks cannot be edited (409) — must reopen first (Subtask 6)
+- Trainer scope checks against existing task batches, not all batches globally
+- `addBatchIds` only (no remove) — removing batches with existing submissions is deferred
+- isInternal→false blocked if students have marks (data integrity)
+- maxMarks lowering blocked if any student exceeds new max (data integrity)
+- isMandatory false→true backfills submissions for all students who don't have one yet
+- Existing submissions are always preserved regardless of changes
+- Notifications sent to all students with submissions on any edit
 
 ---
 
