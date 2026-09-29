@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { requirePermission } from '../auth/rbac.middleware';
 import { validate } from '../middleware/validate.middleware';
-import { createTaskSchema, updateTaskSchema } from '../validators/tasks.validator';
-import { createTaskHandler, updateTaskHandler, listTasksHandler, getTaskHandler } from '../controllers/tasks.controller';
+import { createTaskSchema, updateTaskSchema, changeDeadlineSchema } from '../validators/tasks.validator';
+import { createTaskHandler, updateTaskHandler, listTasksHandler, getTaskHandler, changeDeadlineHandler } from '../controllers/tasks.controller';
 
 const router = Router();
 
@@ -30,6 +30,13 @@ router.put(
   requirePermission('tasks:update:batch', 'tasks:update:any'),
   validate(updateTaskSchema),
   updateTaskHandler,
+);
+
+router.patch(
+  '/:id/deadline',
+  requirePermission('tasks:update:batch', 'tasks:update:any'),
+  validate(changeDeadlineSchema),
+  changeDeadlineHandler,
 );
 
 export default router;

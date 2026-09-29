@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { sendSuccess, sendError } from '../utils/response';
-import { ServiceError, createTask, updateTask, listTasks, getTaskById } from '../services/tasks.service';
+import { ServiceError, createTask, updateTask, listTasks, getTaskById, changeDeadline } from '../services/tasks.service';
 import { sendPaginated } from '../utils/response';
 import { DeadlineType, TaskProgress } from '@prisma/client';
 
@@ -80,6 +80,17 @@ export async function getTaskHandler(req: Request, res: Response, next: NextFunc
     }
 
     const result = await getTaskById(String(req.params.id), req.user!.sub, scope, progressFilter);
+    return sendSuccess(res, result);
+  } catch (err) {
+    return handleServiceError(err, res, next);
+  }
+}
+
+export async function changeDeadlineHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const heldPermissions: Set<string> = (req as any).heldPermissions || new Set();
+    const scope = heldPermissions.has('tasks:update:any') ? 'any' : 'batch';
+    const result = await changeDeadline(String(req.params.id), req.body, req.user!.sub, scope);
     return sendSuccess(res, result);
   } catch (err) {
     return handleServiceError(err, res, next);

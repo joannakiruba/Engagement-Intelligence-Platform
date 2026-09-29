@@ -83,3 +83,35 @@ export const createTaskSchema = Joi.object({
 
   return value;
 });
+
+export const changeDeadlineSchema = Joi.object({
+  deadlineType: Joi.string()
+    .valid('FIXED', 'TENTATIVE', 'TBD', 'NONE')
+    .required(),
+
+  deadline: Joi.string().isoDate().optional()
+    .messages({ 'string.isoDate': 'deadline must be a valid ISO datetime' }),
+
+  deadlineNote: Joi.string().allow('', null).optional(),
+
+  reason: Joi.string().allow('').optional(),
+}).custom((value, helpers) => {
+  if (value.deadlineType === 'FIXED') {
+    if (!value.deadline) {
+      return helpers.message({ custom: 'deadline is required when deadlineType is FIXED' });
+    }
+    if (new Date(value.deadline) <= new Date()) {
+      return helpers.message({ custom: 'FIXED deadline must be in the future' });
+    }
+  }
+
+  if (value.deadlineType !== 'FIXED' && value.deadline) {
+    return helpers.message({ custom: 'deadline is only allowed when deadlineType is FIXED' });
+  }
+
+  if (value.deadlineNote && !['TENTATIVE', 'TBD'].includes(value.deadlineType)) {
+    return helpers.message({ custom: 'deadlineNote is only allowed for TENTATIVE or TBD deadline types' });
+  }
+
+  return value;
+});

@@ -532,3 +532,105 @@ export async function getTaskById(
     progressCounts,
   };
 }
+
+interface ChangeDeadlineInput {
+  deadlineType: DeadlineType;
+  deadline?: string;
+  deadlineNote?: string;
+  reason?: string;
+}
+
+export async function changeDeadline(
+  taskId: string,
+  input: ChangeDeadlineInput,
+  changedById: string,
+  scope: string,
+) {
+  const existing = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: {
+      taskBatches: { select: { batchId: true } },
+    },
+  });
+
+  if (!existing) {
+    throw new ServiceError('Task not found', 404);
+  }
+
+  if (existing.closedAt) {
+    throw new ServiceError('Cannot change deadline of a closed task', 409);
+  }
+
+  if (scope !== 'any') {
+    const existingBatchIds = existing.taskBatches.map((tb) => tb.batchId);
+    const trainerBatch = await prisma.batchTrainer.findFirst({
+      where: { trainerId: changedById, batchId: { in: existingBatchIds } },
+    });
+    if (!trainerBatch) {
+      throw new ServiceError('You are not a trainer for any of this task\'s batches', 403);
+    }
+  }
+
+  const newDeadline = input.deadline ? new Date(input.deadline) : null;
+
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.taskDeadlineChange.create({
+      data: {
+        taskId,
+        oldDeadlineType: existing.deadlineType,
+        newDeadlineType: input.deadlineType,
+        oldDeadline: existing.deadline,
+        newDeadline: newDeadline,
+        reason: input.reason || null,
+        changedById,
+      },
+    });
+
+    const task = await tx.task.update({
+      where: { id: taskId },
+      data: {
+        deadlineType: input.deadlineType,
+        deadline: newDeadline,
+        deadlineNote: input.deadlineNote !== undefined ? input.deadlineNote : existing.deadlineNote,
+      },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        taskBatches: {
+          include: { batch: { select: { id: true, name: true } } },
+        },
+      },
+    });
+
+    if (newDeadline && input.deadlineType === 'FIXED') {
+      const completedSubs = await tx.taskSubmission.findMany({
+        where: { taskId, progress: 'COMPLETED', completedAt: { not: null } },
+        select: { id: true, completedAt: true },
+      });
+
+      for (const sub of completedSubs) {
+        await tx.taskSubmission.update({
+          where: { id: sub.id },
+          data: { isLate: sub.completedAt! > newDeadline },
+        });
+      }
+    } else if (input.deadlineType !== 'FIXED') {
+      await tx.taskSubmission.updateMany({
+        where: { taskId, isLate: { not: null } },
+        data: { isLate: null },
+      });
+    }
+
+    await notifyStudents(
+      tx,
+      taskId,
+      task.title,
+      input.deadlineType === 'NONE'
+        ? 'Deadline has been removed'
+        : `Deadline changed to ${input.deadlineType}${newDeadline ? ': ' + newDeadline.toISOString() : ''}`,
+    );
+
+    return task;
+  });
+
+  return result;
+}
