@@ -570,6 +570,34 @@ Also fixed: duplicate import of `sendPaginated` in the controller (merged into s
 
 ---
 
+## Post-Implementation Testing — Bugs Found & Fixed
+
+### Bug 5 (HIGH): `updateStudentProgress` — no batch membership check
+
+**Problem:** Any student could call `PATCH /api/tasks/:id/progress` on any task, even tasks for batches they're not in. For optional tasks, a submission row would be created for a student who shouldn't have access.
+
+**Fix:** Added batch membership check — verifies the student is a BatchMember of at least one of the task's target batches before allowing progress updates. Returns 403 if not.
+
+### Bug 6 (HIGH): `toggleInterested` — no batch membership check
+
+**Problem:** Same as Bug 5. Any student could toggle interest on any optional task regardless of batch membership, creating rogue submission rows.
+
+**Fix:** Added same batch membership verification before the submission lookup/create.
+
+### Bug 7 (MEDIUM): `updateStudentProgress` — completedAt not set for new submissions
+
+**Problem:** When an optional-task student made their first progress update directly to COMPLETED, the code created the submission with `progress: 'COMPLETED'` then checked `submission.progress !== 'COMPLETED'` which was false (just set it). So `completedAt` and `isLate` were never computed.
+
+**Fix:** Track whether the submission is newly created via `isNew` flag. Create new submissions with default NOT_STARTED, then let the existing completedAt/isLate logic handle the COMPLETED transition correctly.
+
+### Bug 8 (MEDIUM): `getTaskById` — student scope falls through to trainer check
+
+**Problem:** The `GET /api/tasks/:id` route allows `tasks:read:own` (students), but the controller set scope to `'batch'` for anyone without `tasks:read:any`. The service then checked BatchTrainer — students aren't trainers, so they'd get 403 on every detail view.
+
+**Fix:** Added three-way scope derivation in controller (`any` / `batch` / `own`) and corresponding batch membership check in the service for `own` scope.
+
+---
+
 ## Subtask 6: Close / Reopen / Delete
 
 ### Endpoints

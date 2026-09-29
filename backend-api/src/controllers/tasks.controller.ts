@@ -85,7 +85,10 @@ export async function listTasksHandler(req: Request, res: Response, next: NextFu
 export async function getTaskHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const heldPermissions: Set<string> = (req as any).heldPermissions || new Set();
-    const scope = heldPermissions.has('tasks:read:any') ? 'any' : 'batch';
+    let scope: string;
+    if (heldPermissions.has('tasks:read:any')) scope = 'any';
+    else if (heldPermissions.has('tasks:read:batch')) scope = 'batch';
+    else scope = 'own';
 
     let progressFilter: TaskProgress | undefined;
     if (req.query.progress) {

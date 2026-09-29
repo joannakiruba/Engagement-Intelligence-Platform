@@ -504,7 +504,15 @@ export async function getTaskById(
     throw new ServiceError('Task not found', 404);
   }
 
-  if (scope !== 'any') {
+  if (scope === 'own') {
+    const taskBatchIds = task.taskBatches.map((tb) => tb.batchId);
+    const membership = await prisma.batchMember.findFirst({
+      where: { studentId: requesterId, batchId: { in: taskBatchIds } },
+    });
+    if (!membership) {
+      throw new ServiceError('Task not found', 404);
+    }
+  } else if (scope === 'batch') {
     const taskBatchIds = task.taskBatches.map((tb) => tb.batchId);
     const trainerBatch = await prisma.batchTrainer.findFirst({
       where: { trainerId: requesterId, batchId: { in: taskBatchIds } },
@@ -824,11 +832,19 @@ export async function updateStudentProgress(
 ) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { id: true, closedAt: true, deadlineType: true, deadline: true, isMandatory: true },
+    include: { taskBatches: { select: { batchId: true } } },
   });
 
   if (!task) throw new ServiceError('Task not found', 404);
   if (task.closedAt) throw new ServiceError('Cannot update progress on a closed task', 409);
+
+  const taskBatchIds = task.taskBatches.map((tb) => tb.batchId);
+  const membership = await prisma.batchMember.findFirst({
+    where: { studentId, batchId: { in: taskBatchIds } },
+  });
+  if (!membership) {
+    throw new ServiceError('You are not a member of any batch this task targets', 403);
+  }
 
   let submission = await prisma.taskSubmission.findUnique({
     where: { taskId_studentId: { taskId, studentId } },
@@ -838,9 +854,11 @@ export async function updateStudentProgress(
     throw new ServiceError('Submission record missing for mandatory task', 500);
   }
 
+  const isNew = !submission;
+
   if (!submission) {
     submission = await prisma.taskSubmission.create({
-      data: { taskId, studentId, progress },
+      data: { taskId, studentId },
     });
   }
 
@@ -848,10 +866,10 @@ export async function updateStudentProgress(
   let completedAt = submission.completedAt;
   let isLate = submission.isLate;
 
-  if (progress === 'COMPLETED' && submission.progress !== 'COMPLETED') {
+  if (progress === 'COMPLETED' && (isNew || submission.progress !== 'COMPLETED')) {
     completedAt = now;
     isLate = task.deadlineType === 'FIXED' && task.deadline ? now > task.deadline : null;
-  } else if (progress !== 'COMPLETED' && submission.progress === 'COMPLETED') {
+  } else if (progress !== 'COMPLETED' && !isNew && submission.progress === 'COMPLETED') {
     completedAt = null;
     isLate = null;
   }
@@ -870,12 +888,20 @@ export async function updateStudentProgress(
 export async function toggleInterested(taskId: string, studentId: string) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { id: true, closedAt: true, isMandatory: true },
+    include: { taskBatches: { select: { batchId: true } } },
   });
 
   if (!task) throw new ServiceError('Task not found', 404);
   if (task.closedAt) throw new ServiceError('Cannot express interest in a closed task', 409);
   if (task.isMandatory) throw new ServiceError('Cannot toggle interest on a mandatory task', 400);
+
+  const taskBatchIds = task.taskBatches.map((tb) => tb.batchId);
+  const membership = await prisma.batchMember.findFirst({
+    where: { studentId, batchId: { in: taskBatchIds } },
+  });
+  if (!membership) {
+    throw new ServiceError('You are not a member of any batch this task targets', 403);
+  }
 
   let submission = await prisma.taskSubmission.findUnique({
     where: { taskId_studentId: { taskId, studentId } },
