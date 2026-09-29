@@ -20,6 +20,7 @@ import feedbackRoutes from './routes/feedback.routes';
 import mentorAssignmentRoutes from './routes/mentor-assignments.routes';
 import riskRoutes from './routes/risk.routes';
 import mentorAlertRoutes from './routes/mentor-alerts.routes';
+import taskRoutes from './routes/tasks.routes';
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use('/api/feedback', authenticateJwt, feedbackRoutes);
 app.use('/api/mentor-assignments', authenticateJwt, mentorAssignmentRoutes);
 app.use('/api/risk', authenticateJwt, riskRoutes);
 app.use('/api/mentor-alerts', authenticateJwt, mentorAlertRoutes);
+app.use('/api/tasks', authenticateJwt, taskRoutes);
 
 app.use(errorHandler);
 
