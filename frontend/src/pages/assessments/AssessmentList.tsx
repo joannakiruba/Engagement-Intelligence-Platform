@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getAssessments, deleteAssessment } from "../../services/assessments.service";
+import { useAuth } from "../../context/AuthContext";
 
 interface AssessmentSummary {
   id: string;
@@ -15,6 +16,8 @@ interface AssessmentSummary {
 }
 
 export default function AssessmentList() {
+  const { user } = useAuth();
+  const canManage = user && ["TRAINER", "ADMIN"].includes(user.role);
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
   const [typeFilter, setTypeFilter] = useState("");
   const [loading, setLoading] = useState(true);
@@ -46,12 +49,14 @@ export default function AssessmentList() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Assessments</h1>
-        <Link
-          to="/assessments/create"
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Create Assessment
-        </Link>
+        {canManage && (
+          <Link
+            to="/assessments/create"
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            Create Assessment
+          </Link>
+        )}
       </div>
 
       <div className="mb-4">
@@ -90,7 +95,7 @@ export default function AssessmentList() {
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
                   Results
                 </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Actions</th>
+                {canManage && <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -111,26 +116,28 @@ export default function AssessmentList() {
                     {a.sectionCount} ({a.questionCount} Q)
                   </td>
                   <td className="px-4 py-3 text-sm">{a.resultCount}</td>
-                  <td className="px-4 py-3 text-sm space-x-2">
-                    <Link
-                      to={`/assessments/${a.id}/edit`}
-                      className="text-gray-600 hover:text-gray-900"
-                    >
-                      Edit
-                    </Link>
-                    <Link
-                      to={`/assessments/${a.id}/bulk-upload`}
-                      className="text-green-600 hover:text-green-800"
-                    >
-                      Upload
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(a.id)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Delete
-                    </button>
-                  </td>
+                  {canManage && (
+                    <td className="px-4 py-3 text-sm space-x-2">
+                      <Link
+                        to={`/assessments/${a.id}/edit`}
+                        className="text-gray-600 hover:text-gray-900"
+                      >
+                        Edit
+                      </Link>
+                      <Link
+                        to={`/assessments/${a.id}/bulk-upload`}
+                        className="text-green-600 hover:text-green-800"
+                      >
+                        Upload
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(a.id)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

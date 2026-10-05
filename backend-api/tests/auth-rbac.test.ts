@@ -718,9 +718,9 @@ describe('Seed Configuration', () => {
     expect(ROLES).toContain('ADMIN');
   });
 
-  test('72 unique permission codes', () => {
+  test('84 unique permission codes', () => {
     const uniqueCodes = new Set(PERMISSIONS.map((p) => p.code));
-    expect(uniqueCodes.size).toBe(72);
+    expect(uniqueCodes.size).toBe(84);
   });
 
   test('no duplicate permission codes', () => {

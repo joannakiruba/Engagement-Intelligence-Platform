@@ -11,6 +11,7 @@ import {
   createSession,
   deleteSession,
 } from "../../services/batches.service";
+import { useAuth } from "../../context/AuthContext";
 
 interface Trainer {
   id: string;
@@ -39,6 +40,9 @@ interface Session {
 
 export default function BatchDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
+  const canManageSessions = user && ["TRAINER", "ADMIN"].includes(user.role);
 
   const [batch, setBatch] = useState<any>(null);
   const [roster, setRoster] = useState<Student[]>([]);
@@ -192,12 +196,14 @@ export default function BatchDetail() {
           </p>
           {batch.description && <p className="text-gray-600 mt-1">{batch.description}</p>}
         </div>
-        <Link
-          to={`/batches/${id}/edit`}
-          className="bg-gray-100 border px-4 py-2 rounded text-sm hover:bg-gray-200"
-        >
-          Edit Batch
-        </Link>
+        {isAdmin && (
+          <Link
+            to={`/batches/${id}/edit`}
+            className="bg-gray-100 border px-4 py-2 rounded text-sm hover:bg-gray-200"
+          >
+            Edit Batch
+          </Link>
+        )}
       </div>
 
       {/* Trainers */}
@@ -214,7 +220,7 @@ export default function BatchDetail() {
                   <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Name</th>
                   <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Email</th>
                   <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Assigned</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Actions</th>
+                  {isAdmin && <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -225,14 +231,16 @@ export default function BatchDetail() {
                     <td className="px-4 py-2 text-sm text-gray-500">
                       {new Date(t.assignedAt).toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-2 text-sm">
-                      <button
-                        onClick={() => handleRemoveTrainer(t.id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Remove
-                      </button>
-                    </td>
+                    {isAdmin && (
+                      <td className="px-4 py-2 text-sm">
+                        <button
+                          onClick={() => handleRemoveTrainer(t.id)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -240,23 +248,27 @@ export default function BatchDetail() {
           </div>
         )}
 
-        <form onSubmit={handleAssignTrainer} className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Trainer ID (UUID)"
-            value={trainerId}
-            onChange={(e) => setTrainerId(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm flex-1 max-w-md"
-            required
-          />
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
-          >
-            Assign Trainer
-          </button>
-        </form>
-        {trainerError && <p className="text-red-500 text-sm mt-1">{trainerError}</p>}
+        {isAdmin && (
+          <>
+            <form onSubmit={handleAssignTrainer} className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Trainer ID (UUID)"
+                value={trainerId}
+                onChange={(e) => setTrainerId(e.target.value)}
+                className="border rounded px-3 py-1.5 text-sm flex-1 max-w-md"
+                required
+              />
+              <button
+                type="submit"
+                className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
+              >
+                Assign Trainer
+              </button>
+            </form>
+            {trainerError && <p className="text-red-500 text-sm mt-1">{trainerError}</p>}
+          </>
+        )}
       </div>
 
       {/* Students / Roster */}
@@ -272,7 +284,7 @@ export default function BatchDetail() {
                   <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Email</th>
                   <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Department</th>
                   <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Joined</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Actions</th>
+                  {isAdmin && <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -284,14 +296,16 @@ export default function BatchDetail() {
                     <td className="px-4 py-2 text-sm text-gray-500">
                       {new Date(s.joinedAt).toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-2 text-sm">
-                      <button
-                        onClick={() => handleRemoveStudent(s.id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Remove
-                      </button>
-                    </td>
+                    {isAdmin && (
+                      <td className="px-4 py-2 text-sm">
+                        <button
+                          onClick={() => handleRemoveStudent(s.id)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -299,38 +313,44 @@ export default function BatchDetail() {
           </div>
         )}
 
-        <form onSubmit={handleAddStudent} className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Student ID (UUID)"
-            value={studentId}
-            onChange={(e) => setStudentId(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm flex-1 max-w-md"
-            required
-          />
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
-          >
-            Add Student
-          </button>
-        </form>
-        {studentError && <p className="text-red-500 text-sm mt-1">{studentError}</p>}
+        {isAdmin && (
+          <>
+            <form onSubmit={handleAddStudent} className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Student ID (UUID)"
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+                className="border rounded px-3 py-1.5 text-sm flex-1 max-w-md"
+                required
+              />
+              <button
+                type="submit"
+                className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
+              >
+                Add Student
+              </button>
+            </form>
+            {studentError && <p className="text-red-500 text-sm mt-1">{studentError}</p>}
+          </>
+        )}
       </div>
 
       {/* Sessions */}
       <div className="mb-8">
         <div className="flex justify-between items-center mb-3">
           <h2 className="text-lg font-semibold">Sessions ({sessions.length})</h2>
-          <button
-            onClick={() => setShowSessionForm(!showSessionForm)}
-            className="bg-gray-100 border px-3 py-1 rounded text-sm hover:bg-gray-200"
-          >
-            {showSessionForm ? "Cancel" : "+ Create Session"}
-          </button>
+          {canManageSessions && (
+            <button
+              onClick={() => setShowSessionForm(!showSessionForm)}
+              className="bg-gray-100 border px-3 py-1 rounded text-sm hover:bg-gray-200"
+            >
+              {showSessionForm ? "Cancel" : "+ Create Session"}
+            </button>
+          )}
         </div>
 
-        {showSessionForm && (
+        {showSessionForm && canManageSessions && (
           <div className="bg-white border rounded-lg p-4 mb-4">
             {sessionError && (
               <div className="bg-red-50 border border-red-200 text-red-700 p-2 rounded mb-3 text-sm">
@@ -448,24 +468,28 @@ export default function BatchDetail() {
                     </td>
                     <td className="px-4 py-2 text-sm">{s.trainer.name}</td>
                     <td className="px-4 py-2 text-sm flex gap-2">
-                      <Link
-                        to={`/attendance/mark/${s.id}`}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        Mark Attendance
-                      </Link>
+                      {user?.role === "TRAINER" && (
+                        <Link
+                          to={`/attendance/mark/${s.id}`}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          Mark Attendance
+                        </Link>
+                      )}
                       <Link
                         to={`/attendance/session/${s.id}`}
                         className="text-gray-600 hover:text-gray-800"
                       >
                         View
                       </Link>
-                      <button
-                        onClick={() => handleDeleteSession(s.id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Delete
-                      </button>
+                      {canManageSessions && (
+                        <button
+                          onClick={() => handleDeleteSession(s.id)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

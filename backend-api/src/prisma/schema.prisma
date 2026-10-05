@@ -51,6 +51,7 @@ enum NotificationType {
   EVENT_REMINDER
   INTERVENTION
   GENERAL
+  TASK_UPDATE
 }
 
 enum ProofStatus {
@@ -59,9 +60,22 @@ enum ProofStatus {
   REJECTED
 }
 
+enum DeadlineType {
+  FIXED
+  TENTATIVE
+  TBD
+  NONE
+}
+
+enum TaskProgress {
+  NOT_STARTED
+  IN_PROGRESS
+  ALMOST_COMPLETED
+  COMPLETED
+}
+
 model Role {
   id String @id @default(uuid())
-  @@map("roles")
 
   name String @unique
 
@@ -72,11 +86,12 @@ model Role {
   users User[]
 
   permissions RolePermission[]
+
+  @@map("roles")
 }
 
 model Permission {
   id String @id @default(uuid())
-  @@map("permissions")
 
   code String @unique
 
@@ -85,23 +100,24 @@ model Permission {
   createdAt DateTime @default(now())
 
   roles RolePermission[]
+
+  @@map("permissions")
 }
 
 model RolePermission {
   roleId       String
   permissionId String
-  @@map("role_permissions")
 
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
+  @@map("role_permissions")
 }
 
 model User {
   id           String  @id @default(uuid())
-  @@map("users")
   name         String
   email        String  @unique
   passwordHash String?
@@ -131,7 +147,6 @@ model User {
 
   studentQuestionScores StudentQuestionScore[]
 
-
   feedbackReceived Feedback[] @relation("StudentFeedback")
   feedbackGiven    Feedback[] @relation("TrainerFeedback")
 
@@ -150,11 +165,17 @@ model User {
 
   auditLogs AuditLog[]
   sessions  Session[]
+
+  tasksCreated        Task[]               @relation("TaskCreator")
+  taskSubmissions     TaskSubmission[]     @relation("TaskStudent")
+  taskGrades          TaskSubmission[]     @relation("TaskGrader")
+  taskDeadlineChanges TaskDeadlineChange[] @relation("DeadlineChanger")
+
+  @@map("users")
 }
 
 model Batch {
   id String @id @default(uuid())
-  @@map("batches")
 
   name       String
   department String?
@@ -171,11 +192,13 @@ model Batch {
   trainers    BatchTrainer[]
   sessions    Session[]
   assessments Assessment[]
+  taskBatches TaskBatch[]
+
+  @@map("batches")
 }
 
 model BatchMember {
   id String @id @default(uuid())
-  @@map("batch_members")
 
   batchId   String
   studentId String
@@ -187,11 +210,11 @@ model BatchMember {
   joinedAt DateTime @default(now())
 
   @@unique([batchId, studentId])
+  @@map("batch_members")
 }
 
 model BatchTrainer {
   id String @id @default(uuid())
-  @@map("batch_trainers")
 
   batchId   String
   trainerId String
@@ -203,11 +226,11 @@ model BatchTrainer {
   assignedAt DateTime @default(now())
 
   @@unique([batchId, trainerId])
+  @@map("batch_trainers")
 }
 
 model Session {
   id String @id @default(uuid())
-  @@map("sessions")
 
   batchId   String
   trainerId String
@@ -230,11 +253,12 @@ model Session {
   attendanceWindows AttendanceWindow[]
   attendances       Attendance[]
   feedbacks         Feedback[]
+
+  @@map("sessions")
 }
 
 model AttendanceWindow {
   id String @id @default(uuid())
-  @@map("attendance_windows")
 
   sessionId String
 
@@ -247,11 +271,12 @@ model AttendanceWindow {
 
   session     Session      @relation(fields: [sessionId], references: [id])
   attendances Attendance[]
+
+  @@map("attendance_windows")
 }
 
 model Attendance {
   id String @id @default(uuid())
-  @@map("attendance")
 
   windowId  String
   sessionId String
@@ -270,11 +295,11 @@ model Attendance {
   student User             @relation(fields: [studentId], references: [id])
 
   @@unique([windowId, studentId])
+  @@map("attendance")
 }
 
 model Assessment {
   id String @id @default(uuid())
-  @@map("assessments")
 
   batchId String
 
@@ -294,11 +319,12 @@ model Assessment {
   results AssessmentResult[]
 
   sections AssessmentSection[]
+
+  @@map("assessments")
 }
 
 model AssessmentResult {
   id String @id @default(uuid())
-  @@map("assessment_results")
 
   assessmentId String
   studentId    String
@@ -314,11 +340,11 @@ model AssessmentResult {
   student User @relation(fields: [studentId], references: [id])
 
   @@unique([assessmentId, studentId])
+  @@map("assessment_results")
 }
 
 model AssessmentSection {
   id String @id @default(uuid())
-  @@map("assessment_sections")
 
   assessmentId String
 
@@ -333,11 +359,12 @@ model AssessmentSection {
   assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
 
   questions AssessmentQuestion[]
+
+  @@map("assessment_sections")
 }
 
 model AssessmentQuestion {
   id String @id @default(uuid())
-  @@map("assessment_questions")
 
   sectionId String
 
@@ -352,11 +379,12 @@ model AssessmentQuestion {
   section AssessmentSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   studentScores StudentQuestionScore[]
+
+  @@map("assessment_questions")
 }
 
 model StudentQuestionScore {
   id String @id @default(uuid())
-  @@map("student_question_scores")
 
   questionId String
   studentId  String
@@ -370,11 +398,11 @@ model StudentQuestionScore {
   student User @relation(fields: [studentId], references: [id], onDelete: Restrict)
 
   @@unique([questionId, studentId])
+  @@map("student_question_scores")
 }
 
 model Feedback {
   id String @id @default(uuid())
-  @@map("feedback")
 
   sessionId String
   studentId String
@@ -392,11 +420,12 @@ model Feedback {
   student User @relation("StudentFeedback", fields: [studentId], references: [id])
 
   trainer User @relation("TrainerFeedback", fields: [trainerId], references: [id])
+
+  @@map("feedback")
 }
 
 model MentorAssignment {
   id String @id @default(uuid())
-  @@map("mentor_assignments")
 
   mentorId  String
   studentId String
@@ -408,11 +437,11 @@ model MentorAssignment {
   assignedAt DateTime @default(now())
 
   @@unique([mentorId, studentId])
+  @@map("mentor_assignments")
 }
 
 model RiskScore {
   id String @id @default(uuid())
-  @@map("risk_scores")
 
   studentId String
 
@@ -431,11 +460,12 @@ model RiskScore {
   student User @relation(fields: [studentId], references: [id])
 
   interventions Intervention[]
+
+  @@map("risk_scores")
 }
 
 model Intervention {
   id String @id @default(uuid())
-  @@map("interventions")
 
   studentId String
   mentorId  String
@@ -461,11 +491,12 @@ model Intervention {
   updates InterventionUpdate[]
 
   outcome InterventionOutcome?
+
+  @@map("interventions")
 }
 
 model InterventionUpdate {
   id String @id @default(uuid())
-  @@map("intervention_updates")
 
   interventionId String
 
@@ -474,11 +505,12 @@ model InterventionUpdate {
   createdAt DateTime @default(now())
 
   intervention Intervention @relation(fields: [interventionId], references: [id])
+
+  @@map("intervention_updates")
 }
 
 model InterventionOutcome {
   id String @id @default(uuid())
-  @@map("intervention_outcomes")
 
   interventionId String @unique
 
@@ -489,11 +521,12 @@ model InterventionOutcome {
   recordedAt DateTime @default(now())
 
   intervention Intervention @relation(fields: [interventionId], references: [id])
+
+  @@map("intervention_outcomes")
 }
 
 model Notification {
   id String @id @default(uuid())
-  @@map("notifications")
 
   userId String
 
@@ -507,11 +540,12 @@ model Notification {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
 }
 
 model Event {
   id String @id @default(uuid())
-  @@map("events")
 
   title       String
   description String?
@@ -527,11 +561,12 @@ model Event {
   registrations EventRegistration[]
 
   proofSubmissions ProofSubmission[]
+
+  @@map("events")
 }
 
 model EventRegistration {
   id String @id @default(uuid())
-  @@map("event_registrations")
 
   eventId   String
   studentId String
@@ -543,11 +578,11 @@ model EventRegistration {
   student User @relation(fields: [studentId], references: [id])
 
   @@unique([eventId, studentId])
+  @@map("event_registrations")
 }
 
 model ProofSubmission {
   id String @id @default(uuid())
-  @@map("proof_submissions")
 
   eventId   String
   studentId String
@@ -565,11 +600,12 @@ model ProofSubmission {
   event Event @relation(fields: [eventId], references: [id])
 
   student User @relation(fields: [studentId], references: [id])
+
+  @@map("proof_submissions")
 }
 
 model RefreshToken {
   id String @id @default(uuid())
-  @@map("refresh_tokens")
 
   tokenHash String @unique
 
@@ -587,11 +623,11 @@ model RefreshToken {
 
   @@index([userId])
   @@index([familyId])
+  @@map("refresh_tokens")
 }
 
 model AccountActivationToken {
   id String @id @default(uuid())
-  @@map("account_activation_tokens")
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -604,11 +640,11 @@ model AccountActivationToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@map("account_activation_tokens")
 }
 
 model PasswordResetToken {
   id String @id @default(uuid())
-  @@map("password_reset_tokens")
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -621,11 +657,11 @@ model PasswordResetToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 model AuditLog {
   id String @id @default(uuid())
-  @@map("audit_logs")
 
   userId String?
 
@@ -644,4 +680,98 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model Task {
+  id String @id @default(uuid())
+
+  title       String
+  description String?
+
+  isMandatory Boolean @default(true)
+  isInternal  Boolean @default(false)
+  maxMarks    Float?
+
+  deadlineType DeadlineType @default(NONE)
+  deadline     DateTime?
+  deadlineNote String?
+
+  closedAt DateTime?
+
+  createdById String
+  createdBy   User   @relation("TaskCreator", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  taskBatches     TaskBatch[]
+  submissions     TaskSubmission[]
+  deadlineChanges TaskDeadlineChange[]
+
+  @@map("tasks")
+}
+
+model TaskBatch {
+  id String @id @default(uuid())
+
+  taskId  String
+  batchId String
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, batchId])
+  @@map("task_batches")
+}
+
+model TaskSubmission {
+  id String @id @default(uuid())
+
+  taskId    String
+  studentId String
+
+  progress TaskProgress @default(NOT_STARTED)
+
+  isInterested Boolean @default(false)
+
+  completedAt DateTime?
+  isLate      Boolean?
+
+  marksAwarded Float?
+  gradedById   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task     Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  student  User  @relation("TaskStudent", fields: [studentId], references: [id])
+  gradedBy User? @relation("TaskGrader", fields: [gradedById], references: [id])
+
+  @@unique([taskId, studentId], name: "taskId_studentId")
+  @@map("task_submissions")
+}
+
+model TaskDeadlineChange {
+  id String @id @default(uuid())
+
+  taskId String
+
+  oldDeadlineType DeadlineType
+  newDeadlineType DeadlineType
+
+  oldDeadline DateTime?
+  newDeadline DateTime?
+
+  reason String?
+
+  changedById String
+  changedBy   User   @relation("DeadlineChanger", fields: [changedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("task_deadline_changes")
 }

@@ -1556,13 +1556,13 @@ Tested with payloads including `<img src=x onerror=alert(1)>`, `O'Brien & Associ
 | `src/prisma/permission-catalog.ts` | MODIFIED — 3 new permissions |
 | `src/server.ts` | MODIFIED — mounted weekly-report routes, fixed dynamic imports to require() for CJS compatibility |
 | `src/swagger/swagger.json` | MODIFIED — 3 endpoint docs with 400 error responses |
-| `tests/auth-rbac.test.ts` | MODIFIED — permission count updated to 72 |
+| `tests/auth-rbac.test.ts` | MODIFIED — permission count updated to 84 (post-merge with upstream tasks/proofs/engagement) |
 
-### Verification Results (2026-10-05, final)
+### Verification Results (2026-10-05, post-merge with upstream main at be95ddf)
 
-**TypeScript check**: 0 errors. Clean `tsc --noEmit` and `tsc --build`.
+**TypeScript check**: 0 errors. Clean `tsc --noEmit` (exit 0) and `tsc --build` (exit 0).
 
-The 3 dynamic import errors that existed on upstream main (`import('./jobs/email.job')` etc. in `server.ts`) were fixed by switching to `require()` — the project uses CommonJS (`"module": "Node16"` in tsconfig), so dynamic `import()` does not resolve TS module paths. This is a minimal, correct fix.
+Worker startup uses `import('./jobs/*.job.js')` via `Promise.allSettled` with per-worker error reporting. The `.js` suffix resolves correctly under `"module": "Node16"` / `"moduleResolution": "node16"` when the compiled output exists. `initWeeklyReportSchedule()` is called after the weekly-report module loads. Upstream Ticket 10 (Tasks) introduced Prisma models that required `prisma generate` after merge; this was done and all upstream TS errors resolved.
 
 **Unit tests** (`weekly-report.test.ts`): 38 passed, 0 failed
 - computeWeekBounds (timezone-aware): 6 (IST exact boundaries, consecutive week non-overlap, Sunday evening UTC, UTC timezone, year rollover 2026→2027, default timezone check)
@@ -1597,12 +1597,17 @@ The 3 dynamic import errors that existed on upstream main (`import('./jobs/email
 - escapeHtml unit tests (7): ampersand, less-than, greater-than, double quote, single quote, combined, empty string
 - Email rendering tests (9): XSS payload in student name blocked in HTML, HTML entities in mentor name, HTML in reasons, plain text preserves raw characters, weekly report delivery, HTML table structure, empty student list, missing data warnings, trend arrows
 
-**Full backend suite**: 832 passed, 0 skipped, 0 failed across 25 test suites
-- Includes all Ticket 15 tests (79 total: 38 unit + 18 integration + 7 Redis + 16 email)
+**Full backend suite (post-merge)**: 946 passed, 0 skipped, 0 failed across 30 test suites
+- Includes all Ticket 15 tests (79 total: 38 unit + 18 PostgreSQL integration + 7 Redis + 16 email/escaping)
 - Includes all Ticket 14 risk engine tests
-- Includes all Ticket 5 profile endpoint integration tests (37 tests — previously skipped, now pass with seeded database)
-- Includes auth-rbac tests (permission count updated to 72)
+- Includes all Ticket 5 profile endpoint integration tests (37 tests, seeded database)
+- Includes upstream Ticket 10 tests (tasks-controller, tasks-validator)
+- Includes upstream Ticket 12 tests (engagement-controller, engagement-validator)
+- Includes upstream Ticket 20 tests (proofs integration)
+- Includes auth-rbac tests (permission count updated to 84)
 - No regressions in any existing test suite
+
+**Compiled server startup**: Verified with `node dist/server.js`. All 3 workers start, weekly report scheduler initializes (`cron: 0 9 * * 1`), graceful shutdown works. "BullMQ workers initialized" logged only after all succeed.
 
 ### Demo Instructions
 
@@ -1632,8 +1637,9 @@ All previously identified blockers have been resolved:
 
 1. **HTML escaping** — RESOLVED: `escapeHtml()` added to `email.service.ts`, applied to all dynamic values in HTML template. 16 tests verify correctness including XSS payloads.
 2. **Timezone-aware boundaries** — RESOLVED: `computeWeekBounds()` rewritten to compute Monday 00:00 in the configured IANA timezone, then convert to UTC. Verified with exact IST boundary test case. 6 timezone-specific tests added.
-3. **TypeScript build errors** — RESOLVED: dynamic `import()` replaced with `require()` in `server.ts` (CJS project). 0 TS errors, clean production build.
-4. **Regression verification** — RESOLVED: 37 previously-skipped profile tests now pass with seeded database. Integration tests scoped to test-specific records. Full suite: 832 passed, 0 failed, 0 skipped.
+3. **TypeScript build errors** — RESOLVED: upstream adopted `import('./jobs/*.job.js')` with `.js` suffix (resolves under `moduleResolution: "node16"`). Worker startup refactored to `Promise.allSettled` with per-worker error reporting and `initWeeklyReportSchedule()` call. 0 TS errors, clean production build.
+4. **Regression verification** — RESOLVED: 37 previously-skipped profile tests now pass with seeded database. Integration tests scoped to test-specific records. Full suite post-merge: 946 passed, 0 failed, 0 skipped across 30 suites.
+5. **Upstream integration** — RESOLVED: merged upstream main (be95ddf) including Tickets 10, 12, 20. Conflicts in `server.ts`, `config/index.ts` resolved. Permission count updated to 84 (69 base + 3 weekly_reports + 12 tasks). All upstream routes, permissions, and tests preserved.
 
 ### Remaining Limitations
 

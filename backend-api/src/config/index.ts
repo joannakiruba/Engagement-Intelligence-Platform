@@ -52,6 +52,12 @@ export const config = {
     testPassword: process.env.SEED_TEST_PASSWORD,
   },
 
+  googleDrive: {
+    clientEmail: process.env.GOOGLE_DRIVE_CLIENT_EMAIL || '',
+    privateKey: (process.env.GOOGLE_DRIVE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
+  },
+
   weeklyReport: {
     enabled: process.env.WEEKLY_REPORT_ENABLED !== 'false',
     dayOfWeek: parseInt(process.env.WEEKLY_REPORT_DAY || '1', 10),
