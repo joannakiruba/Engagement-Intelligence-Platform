@@ -1,4 +1,4 @@
-import axios from 'axios';
+import api from './api';
 
 export interface Feedback {
   id: string;
@@ -46,30 +46,30 @@ export async function getFeedbackList(filters?: FeedbackFilters): Promise<Feedba
   if (filters?.sessionId) params.set('sessionId', filters.sessionId);
   if (filters?.studentId) params.set('studentId', filters.studentId);
   if (filters?.trainerId) params.set('trainerId', filters.trainerId);
-  const res = await axios.get(`/api/feedback?${params.toString()}`);
+  const res = await api.get(`/api/feedback?${params.toString()}`);
   return res.data.data;
 }
 
 export async function getFeedback(id: string): Promise<Feedback> {
-  const res = await axios.get(`/api/feedback/${id}`);
+  const res = await api.get(`/api/feedback/${id}`);
   return res.data.data;
 }
 
 export async function createFeedback(payload: CreateFeedbackPayload): Promise<Feedback> {
-  const res = await axios.post('/api/feedback', payload);
+  const res = await api.post('/api/feedback', payload);
   return res.data.data;
 }
 
 export async function bulkCreateFeedback(sessionId: string, records: BulkFeedbackRecord[]): Promise<BulkFeedbackResult> {
-  const res = await axios.post('/api/feedback/bulk', { sessionId, records });
+  const res = await api.post('/api/feedback/bulk', { sessionId, records });
   return res.data.data;
 }
 
 export async function updateFeedback(id: string, payload: Partial<CreateFeedbackPayload>): Promise<Feedback> {
-  const res = await axios.put(`/api/feedback/${id}`, payload);
+  const res = await api.put(`/api/feedback/${id}`, payload);
   return res.data.data;
 }
 
 export async function deleteFeedback(id: string): Promise<void> {
-  await axios.delete(`/api/feedback/${id}`);
+  await api.delete(`/api/feedback/${id}`);
 }

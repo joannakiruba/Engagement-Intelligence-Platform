@@ -5,7 +5,7 @@ import { requirePermission } from '../auth/rbac.middleware';
 
 const router = Router();
 
-router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+router.get('/', requirePermission('events:read:any'), async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const events = await prisma.event.findMany({
       include: {
@@ -19,7 +19,7 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id', requirePermission('events:read:any'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const event = await prisma.event.findUnique({
       where: { id: String(req.params.id) },

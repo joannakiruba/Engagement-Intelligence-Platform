@@ -83,6 +83,23 @@ const FEEDBACK_COMMENTS = [
   'Strong analytical skills, applies concepts well.',
 ];
 
+const EVENT_TYPE_DEFS = [
+  { name: 'HACKATHON', description: 'Competitive coding/building events' },
+  { name: 'WORKSHOP', description: 'Hands-on learning sessions' },
+  { name: 'SEMINAR', description: 'Guest lectures and talks' },
+  { name: 'CONTEST', description: 'Competitive programming contests' },
+  { name: 'OTHER', description: 'Miscellaneous events' },
+];
+
+const EVENT_DEFS = [
+  { title: 'HackForGood 2026', type: 'HACKATHON', description: 'Build social-impact projects in 48 hours', daysFromStart: 7 },
+  { title: 'React Advanced Workshop', type: 'WORKSHOP', description: 'Deep dive into React performance patterns', daysFromStart: 10 },
+  { title: 'Industry Talk: Cloud Architecture', type: 'SEMINAR', description: 'Guest speaker from AWS on serverless patterns', daysFromStart: 12 },
+  { title: 'Algorithm Sprint', type: 'CONTEST', description: 'Competitive programming — 3-hour timed contest', daysFromStart: 14 },
+  { title: 'Open Source Contribution Day', type: 'WORKSHOP', description: 'Contribute to real OSS projects with mentorship', daysFromStart: 18 },
+  { title: 'Demo Day Rehearsal', type: 'OTHER', description: 'Practice presentations for final demo day', daysFromStart: 20 },
+];
+
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -470,8 +487,8 @@ async function main() {
           sessionId,
           studentId,
           trainerId,
-          effortRating: randomInt(2, 5),
-          participationRating: randomInt(2, 5),
+          effortRating: randomInt(1, 5),
+          participationRating: randomInt(1, 5),
           comments: randomPick(FEEDBACK_COMMENTS),
         },
       });
@@ -500,8 +517,94 @@ async function main() {
     console.log(`  Mentor ${m + 1}: ${end - start} students assigned`);
   }
 
+  // ── Phase 13: Event Types ──
+
+  console.log('\nSeeding event types...');
+  for (const et of EVENT_TYPE_DEFS) {
+    await prisma.eventType.upsert({
+      where: { name: et.name },
+      update: { description: et.description },
+      create: { name: et.name, description: et.description },
+    });
+  }
+  console.log(`  ${EVENT_TYPE_DEFS.length} event types upserted.`);
+
+  // ── Phase 14: Events ──
+
+  console.log('\nSeeding events...');
+  const eventIds: string[] = [];
+
+  for (const def of EVENT_DEFS) {
+    const event = await prisma.event.create({
+      data: {
+        title: def.title,
+        eventType: def.type,
+        description: def.description,
+        eventDate: dateOffset(def.daysFromStart),
+        registrationDeadline: dateOffset(def.daysFromStart - 2),
+      },
+    });
+    eventIds.push(event.id);
+    console.log(`  Event: ${def.title} (${def.type})`);
+  }
+
+  // ── Phase 15: Event Registrations ──
+
+  console.log('\nSeeding event registrations...');
+  let registrationCount = 0;
+
+  for (const eventId of eventIds) {
+    const registerCount = randomInt(8, 15);
+    const shuffled = [...studentIds].sort(() => Math.random() - 0.5);
+
+    for (let i = 0; i < Math.min(registerCount, shuffled.length); i++) {
+      await prisma.eventRegistration.upsert({
+        where: { eventId_studentId: { eventId, studentId: shuffled[i] } },
+        update: {},
+        create: { eventId, studentId: shuffled[i] },
+      });
+      registrationCount++;
+    }
+  }
+  console.log(`  ${registrationCount} event registrations created.`);
+
+  // ── Phase 16: Proof Submissions (a subset of registrations) ──
+
+  console.log('\nSeeding proof submissions...');
+  let proofCount = 0;
+
+  const proofStatuses: Array<'PENDING' | 'APPROVED' | 'REJECTED'> = [
+    'PENDING', 'PENDING', 'APPROVED', 'APPROVED', 'APPROVED', 'REJECTED',
+  ];
+
+  for (let e = 0; e < Math.min(3, eventIds.length); e++) {
+    const eventId = eventIds[e];
+    const regs = await prisma.eventRegistration.findMany({
+      where: { eventId },
+      take: 5,
+    });
+
+    for (const reg of regs) {
+      const status = randomPick(proofStatuses);
+      await prisma.proofSubmission.upsert({
+        where: { eventId_studentId: { eventId: reg.eventId, studentId: reg.studentId } },
+        update: {},
+        create: {
+          eventId: reg.eventId,
+          studentId: reg.studentId,
+          fileUrl: `/uploads/proofs/proof-${reg.studentId.slice(0, 8)}-${e}.pdf`,
+          fileName: `certificate-${EVENT_DEFS[e].title.toLowerCase().replace(/\s+/g, '-')}.pdf`,
+          status,
+          remarks: status === 'REJECTED' ? 'File is unreadable — please resubmit a clearer copy.' : undefined,
+        },
+      });
+      proofCount++;
+    }
+  }
+  console.log(`  ${proofCount} proof submissions created.`);
+
   console.log('\nSeed completed successfully.');
-  console.log(`  Summary: ${studentIds.length} students, ${batchIds.length} batches, ${sessionIds.length} sessions, ${attendanceCount} attendance, ${scoreCount} assessment results, ${feedbackCount} feedback, ${mentorIds.length} mentors with assignments`);
+  console.log(`  Summary: ${studentIds.length} students, ${batchIds.length} batches, ${sessionIds.length} sessions, ${attendanceCount} attendance, ${scoreCount} assessment results, ${feedbackCount} feedback, ${mentorIds.length} mentors with assignments, ${eventIds.length} events, ${registrationCount} registrations, ${proofCount} proofs`);
 }
 
 main()

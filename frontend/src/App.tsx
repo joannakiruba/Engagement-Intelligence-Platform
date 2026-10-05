@@ -2,7 +2,14 @@ import { Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/auth/LoginPage";
+import ActivateAccountPage from "./pages/auth/ActivateAccountPage";
+import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import ProfilePage from "./pages/profile/ProfilePage";
+import UserList from "./pages/admin/UserList";
+import UserDetail from "./pages/admin/UserDetail";
+import UserCreate from "./pages/admin/UserCreate";
+import UserBulkUpload from "./pages/admin/UserBulkUpload";
 import AssessmentList from "./pages/assessments/AssessmentList";
 import AssessmentCreate from "./pages/assessments/AssessmentCreate";
 import AssessmentDetail from "./pages/assessments/AssessmentDetail";
@@ -66,6 +73,10 @@ function getNavLinks(role: string): { label: string; to: string }[] {
   }
 
   links.push({ label: "Proofs", to: "/proofs" });
+
+  if (["ADMIN", "COORDINATOR"].includes(role)) {
+    links.push({ label: "Users", to: "/admin/users" });
+  }
 
   return links;
 }
@@ -594,6 +605,9 @@ function AppRoutes() {
       <main className="max-w-7xl mx-auto px-4 py-6">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/activate" element={<ActivateAccountPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           <Route
             path="/"
@@ -848,6 +862,48 @@ function AppRoutes() {
             element={
               <RequireAuth>
                 <ProofsPage />
+              </RequireAuth>
+            }
+          />
+
+          {/* Admin — User Management */}
+          <Route
+            path="/admin/users"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["ADMIN", "COORDINATOR"]}>
+                  <UserList />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/users/create"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["ADMIN"]}>
+                  <UserCreate />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/users/bulk-upload"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["ADMIN"]}>
+                  <UserBulkUpload />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/users/:id"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["ADMIN"]}>
+                  <UserDetail />
+                </RequireRole>
               </RequireAuth>
             }
           />

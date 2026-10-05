@@ -23,6 +23,9 @@ import taskRoutes from './routes/tasks.routes';
 import proofRoutes from './routes/proofs.routes';
 import eventRoutes from './routes/events.routes';
 import engagementRoutes from './routes/engagement.routes';
+import interventionRoutes from './routes/interventions.routes';
+import notificationRoutes from './routes/notifications.routes';
+import eventRegistrationRoutes from './routes/event-registrations.routes';
 
 const app = express();
 
@@ -56,6 +59,9 @@ app.use('/api/tasks', authenticateJwt, taskRoutes);
 app.use('/api/events', authenticateJwt, eventRoutes);
 app.use('/api/proofs', authenticateJwt, proofRoutes);
 app.use('/api/engagement', authenticateJwt, engagementRoutes);
+app.use('/api/interventions', authenticateJwt, interventionRoutes);
+app.use('/api/notifications', authenticateJwt, notificationRoutes);
+app.use('/api/event-registrations', authenticateJwt, eventRegistrationRoutes);
 
 app.use(errorHandler);
 

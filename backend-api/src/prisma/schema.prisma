@@ -254,6 +254,7 @@ model Session {
   attendances       Attendance[]
   feedbacks         Feedback[]
 
+  @@index([batchId])
   @@map("sessions")
 }
 
@@ -295,6 +296,8 @@ model Attendance {
   student User             @relation(fields: [studentId], references: [id])
 
   @@unique([windowId, studentId])
+  @@index([studentId])
+  @@index([sessionId])
   @@map("attendance")
 }
 
@@ -320,6 +323,7 @@ model Assessment {
 
   sections AssessmentSection[]
 
+  @@index([batchId])
   @@map("assessments")
 }
 
@@ -421,6 +425,9 @@ model Feedback {
 
   trainer User @relation("TrainerFeedback", fields: [trainerId], references: [id])
 
+  @@unique([sessionId, studentId])
+  @@index([studentId])
+  @@index([sessionId])
   @@map("feedback")
 }
 
@@ -461,6 +468,7 @@ model RiskScore {
 
   interventions Intervention[]
 
+  @@index([studentId])
   @@map("risk_scores")
 }
 
@@ -492,6 +500,8 @@ model Intervention {
 
   outcome InterventionOutcome?
 
+  @@index([studentId])
+  @@index([mentorId])
   @@map("interventions")
 }
 
@@ -541,7 +551,19 @@ model Notification {
 
   user User @relation(fields: [userId], references: [id])
 
+  @@index([userId])
   @@map("notifications")
+}
+
+model EventType {
+  id String @id @default(uuid())
+
+  name        String @unique
+  description String?
+
+  createdAt DateTime @default(now())
+
+  @@map("event_types")
 }
 
 model Event {
@@ -601,6 +623,7 @@ model ProofSubmission {
 
   student User @relation(fields: [studentId], references: [id])
 
+  @@unique([eventId, studentId])
   @@map("proof_submissions")
 }
 
@@ -774,4 +797,61 @@ model TaskDeadlineChange {
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@map("task_deadline_changes")
+}
+
+model MlMentorAlert {
+  id Int @id @default(autoincrement())
+
+  studentId String  @map("student_id")
+  mentorId  String  @map("mentor_id")
+  batchId   String? @map("batch_id")
+
+  priorityScore Float  @map("priority_score")
+  urgencyTier   String @map("urgency_tier")
+  triggerReason String @map("trigger_reason")
+  riskScore     Float  @map("risk_score")
+  riskVelocity  Float? @map("risk_velocity")
+
+  recommendedIntervention  String? @map("recommended_intervention")
+  recommendationConfidence Float?  @map("recommendation_confidence")
+  recommendationReasoning  String? @map("recommendation_reasoning")
+
+  alertStatus String @default("pending") @map("alert_status")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  seenAt    DateTime? @map("seen_at")
+  actedAt   DateTime? @map("acted_at")
+
+  outcomes MlAlertOutcome[]
+
+  @@index([studentId])
+  @@index([mentorId])
+  @@index([batchId])
+  @@index([urgencyTier])
+  @@index([alertStatus])
+  @@index([createdAt])
+  @@map("ml_mentor_alerts")
+}
+
+model MlAlertOutcome {
+  id Int @id @default(autoincrement())
+
+  alertId Int @map("alert_id")
+
+  mentorResponse    String? @map("mentor_response")
+  responseTimeHours Float?  @map("response_time_hours")
+  interventionId    String? @map("intervention_id")
+
+  studentRiskAfter7d  Float? @map("student_risk_after_7d")
+  studentRiskAfter14d Float? @map("student_risk_after_14d")
+
+  wasRecommendationFollowed Boolean? @default(false) @map("was_recommendation_followed")
+  outcomeNotes              String?  @map("outcome_notes")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  alert MlMentorAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId])
+  @@map("ml_alert_outcomes")
 }

@@ -16,7 +16,7 @@ import {
 interface AuthState {
   user: LoginUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginUser>;
   logout: () => Promise<void>;
 }
 
@@ -32,9 +32,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string): Promise<LoginUser> => {
     const result = await doLogin(email, password);
     setUser(result.user);
+    return result.user;
   }, []);
 
   const logout = useCallback(async () => {

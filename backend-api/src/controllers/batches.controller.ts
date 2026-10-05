@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { sendSuccess, sendError } from "../utils/response";
+import prisma from "../lib/prisma.js";
 import {
   ServiceError,
   createBatch,
@@ -41,9 +42,46 @@ export async function createBatchHandler(req: Request, res: Response, next: Next
   }
 }
 
-export async function listBatchesHandler(_req: Request, res: Response, next: NextFunction) {
+export async function listBatchesHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await listBatches();
+    const page = req.query.page ? parseInt(String(req.query.page), 10) : 1;
+    const limit = req.query.limit ? Math.min(parseInt(String(req.query.limit), 10), 100) : 20;
+    const search = req.query.search ? String(req.query.search).trim() : undefined;
+    const department = req.query.department ? String(req.query.department).trim() : undefined;
+
+    const scope = (req as any).resolvedScope as string | undefined;
+    const userId = req.user?.sub;
+    let scopedBatchIds: string[] | 'all' = 'all';
+
+    if (scope === 'own' && userId) {
+      const memberBatches = await prisma.batchMember.findMany({
+        where: { studentId: userId },
+        select: { batchId: true },
+      });
+      const trainerBatches = await prisma.batchTrainer.findMany({
+        where: { trainerId: userId },
+        select: { batchId: true },
+      });
+      scopedBatchIds = [
+        ...new Set([
+          ...memberBatches.map((m: { batchId: string }) => m.batchId),
+          ...trainerBatches.map((t: { batchId: string }) => t.batchId),
+        ]),
+      ] as string[];
+    } else if (scope === 'assigned' && userId) {
+      const assignments = await prisma.mentorAssignment.findMany({
+        where: { mentorId: userId },
+        select: { studentId: true },
+      });
+      const studentIds = assignments.map((a: { studentId: string }) => a.studentId);
+      const memberBatches = await prisma.batchMember.findMany({
+        where: { studentId: { in: studentIds } },
+        select: { batchId: true },
+      });
+      scopedBatchIds = [...new Set(memberBatches.map((m: { batchId: string }) => m.batchId))] as string[];
+    }
+
+    const result = await listBatches({ page, limit, search, department, scopedBatchIds });
     return sendSuccess(res, result);
   } catch (err) {
     return handleServiceError(err, res, next);

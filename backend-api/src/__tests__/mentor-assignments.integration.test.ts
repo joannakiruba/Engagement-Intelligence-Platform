@@ -9,6 +9,11 @@ const fns = {
   userFindUnique: jest.fn(),
 };
 
+jest.mock("../auth/rbac.middleware", () => ({
+  requirePermission: () => (_req: any, _res: any, next: any) => next(),
+  resolveScope: () => (_req: any, _res: any, next: any) => next(),
+}));
+
 jest.mock("../lib/prisma", () => ({
   __esModule: true,
   default: {
@@ -40,6 +45,10 @@ import { errorHandler } from "../middleware/error.middleware";
 function createApp() {
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    (req as any).user = { sub: "admin-user-id", roleId: "admin-role-id" };
+    next();
+  });
   app.use("/api/mentor-assignments", mentorAssignmentRoutes);
   app.use(errorHandler);
   return app;

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 export default function LoginPage() {
@@ -16,8 +16,15 @@ export default function LoginPage() {
     setError('');
     setSubmitting(true);
     try {
-      await login(email, password);
-      navigate('/profile', { replace: true });
+      const user = await login(email, password);
+      const role = user.role;
+      const dest =
+        role === 'ADMIN' ? '/batches' :
+        role === 'TRAINER' ? '/batches' :
+        role === 'STUDENT' ? '/attendance/check-in' :
+        role === 'MENTOR' ? '/feedback' :
+        '/profile';
+      navigate(dest, { replace: true });
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed. Please try again.');
     } finally {
@@ -67,6 +74,9 @@ export default function LoginPage() {
         >
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
+        <p className="text-center text-sm text-gray-500">
+          <Link to="/forgot-password" className="text-blue-600 hover:underline">Forgot password?</Link>
+        </p>
       </form>
     </div>
   );
