@@ -146,6 +146,20 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'proofs:approve:batch', description: "Approve/reject proofs for one's own batch" },
   { code: 'proofs:approve:any', description: 'Approve/reject any proof submission' },
 
+  // ---- Tasks ----
+  { code: 'tasks:create:batch', description: 'Create tasks for own batch' },
+  { code: 'tasks:create:any', description: 'Create tasks for any batch' },
+  { code: 'tasks:read:own', description: 'Read tasks assigned to oneself (student)' },
+  { code: 'tasks:read:batch', description: 'Read tasks for own batch' },
+  { code: 'tasks:read:any', description: 'Read any task' },
+  { code: 'tasks:update:own', description: 'Update own task progress (student)' },
+  { code: 'tasks:update:batch', description: 'Update tasks for own batch' },
+  { code: 'tasks:update:any', description: 'Update any task' },
+  { code: 'tasks:delete:batch', description: 'Delete tasks for own batch' },
+  { code: 'tasks:delete:any', description: 'Delete any task' },
+  { code: 'tasks:grade:batch', description: 'Grade task submissions for own batch' },
+  { code: 'tasks:grade:any', description: 'Grade any task submission' },
+
   // ---- Audit Log ----
   { code: 'audit_logs:read', description: 'Read the audit log' },
 ];
@@ -169,6 +183,8 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'event_registrations:read:own',
     'proofs:submit:self',
     'proofs:read:own',
+    'tasks:read:own',
+    'tasks:update:own',
   ],
 
   TRAINER: [
@@ -187,19 +203,17 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'assessments:update:batch',
     'feedback:create:batch',
     'feedback:read:own_given',
-    // Category-only, not full risk_scores:read:batch (which doesn't exist
-    // as a code): a full score/factors breakdown is partly derived from
-    // OTHER trainers' feedback risk contributions, which this trainer has
-    // no independent permission to read — exposing the synthesized score
-    // would leak that signal sideways. It also keeps risk-triage as a
-    // single owned pipeline (Mentor), avoiding two people independently
-    // acting on the same flagged student.
     'risk_scores:read:category:batch',
     'risk_scores:calculate:batch',
     'notifications:read:own',
     'events:read:any',
     'proofs:read:batch',
     'proofs:approve:batch',
+    'tasks:create:batch',
+    'tasks:read:batch',
+    'tasks:update:batch',
+    'tasks:delete:batch',
+    'tasks:grade:batch',
   ],
 
   FACULTY: [
@@ -217,6 +231,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'interventions:read:any',
     'notifications:read:own',
     'events:read:any',
+    'tasks:read:any',
   ],
 
   MENTOR: [
@@ -303,6 +318,11 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'event_registrations:read:any',
     'proofs:read:any',
     'proofs:approve:any',
+    'tasks:create:any',
+    'tasks:read:any',
+    'tasks:update:any',
+    'tasks:delete:any',
+    'tasks:grade:any',
     'audit_logs:read',
   ],
 };
