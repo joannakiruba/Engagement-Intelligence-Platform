@@ -1,4 +1,4 @@
-import api from './api';
+import api from "./api";
 
 // --- Filter Types ---
 
@@ -168,43 +168,254 @@ export interface FeedbackTrend {
 }
 
 export interface BatchTrendsData {
-  batch: { id: string; name: string };
+  batch: {
+    id: string;
+    name: string;
+  };
   attendance: AttendanceTrend[];
   assessments: AssessmentTrend[];
   feedback: FeedbackTrend[];
 }
 
-// --- API Functions ---
+// --- Engagement Dashboard API ---
 
-export async function getEngagementDashboard(filters?: DateFilters): Promise<DashboardData> {
+export async function getEngagementDashboard(
+  filters?: DateFilters
+): Promise<DashboardData> {
   const params: Record<string, string> = {};
-  if (filters?.from) params.from = filters.from;
-  if (filters?.to) params.to = filters.to;
-  const res = await api.get('/api/engagement/dashboard', { params });
+
+  if (filters?.from) {
+    params.from = filters.from;
+  }
+
+  if (filters?.to) {
+    params.to = filters.to;
+  }
+
+  const res = await api.get("/api/engagement/dashboard", {
+    params,
+  });
+
   return res.data.data;
 }
 
-export async function getBatchEngagement(batchId: string, filters?: DateFilters): Promise<BatchEngagementData> {
+// --- Batch Engagement API ---
+
+export async function getBatchEngagement(
+  batchId: string,
+  filters?: DateFilters
+): Promise<BatchEngagementData> {
   const params: Record<string, string> = {};
-  if (filters?.from) params.from = filters.from;
-  if (filters?.to) params.to = filters.to;
-  const res = await api.get(`/api/engagement/batch/${batchId}`, { params });
+
+  if (filters?.from) {
+    params.from = filters.from;
+  }
+
+  if (filters?.to) {
+    params.to = filters.to;
+  }
+
+  const res = await api.get(
+    `/api/engagement/batch/${batchId}`,
+    { params }
+  );
+
   return res.data.data;
 }
 
-export async function getStudentEngagement(studentId: string, filters?: StudentFilters): Promise<StudentEngagementData> {
+// --- Student Engagement API ---
+
+export async function getStudentEngagement(
+  studentId: string,
+  filters?: StudentFilters
+): Promise<StudentEngagementData> {
   const params: Record<string, string> = {};
-  if (filters?.batchId) params.batchId = filters.batchId;
-  if (filters?.from) params.from = filters.from;
-  if (filters?.to) params.to = filters.to;
-  const res = await api.get(`/api/engagement/student/${studentId}`, { params });
+
+  if (filters?.batchId) {
+    params.batchId = filters.batchId;
+  }
+
+  if (filters?.from) {
+    params.from = filters.from;
+  }
+
+  if (filters?.to) {
+    params.to = filters.to;
+  }
+
+  const res = await api.get(
+    `/api/engagement/student/${studentId}`,
+    { params }
+  );
+
   return res.data.data;
 }
 
-export async function getBatchTrends(batchId: string, filters?: DateFilters): Promise<BatchTrendsData> {
+// --- Batch Trends API ---
+
+export async function getBatchTrends(
+  batchId: string,
+  filters?: DateFilters
+): Promise<BatchTrendsData> {
   const params: Record<string, string> = {};
-  if (filters?.from) params.from = filters.from;
-  if (filters?.to) params.to = filters.to;
-  const res = await api.get(`/api/engagement/batch/${batchId}/trends`, { params });
+
+  if (filters?.from) {
+    params.from = filters.from;
+  }
+
+  if (filters?.to) {
+    params.to = filters.to;
+  }
+
+  const res = await api.get(
+    `/api/engagement/batch/${batchId}/trends`,
+    { params }
+  );
+
+  return res.data.data;
+}
+
+// --- Events ---
+
+export interface EventItem {
+  id: string;
+  title: string;
+  description: string | null;
+  eventType: string;
+  eventDate: string;
+  registrationDeadline: string | null;
+  createdAt: string;
+  _count?: {
+    registrations: number;
+    proofSubmissions: number;
+  };
+}
+
+export async function getEvents(): Promise<EventItem[]> {
+  const res = await api.get("/api/events");
+
+  return res.data.data;
+}
+
+export async function getEvent(id: string): Promise<EventItem> {
+  const res = await api.get(`/api/events/${id}`);
+
+  return res.data.data;
+}
+
+// --- Proof Submissions ---
+
+export interface ProofSubmission {
+  id: string;
+  eventId: string;
+  studentId: string;
+  fileUrl: string;
+  fileName: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  remarks: string | null;
+  createdAt: string;
+  event?: {
+    id: string;
+    title: string;
+    eventType: string;
+    eventDate?: string;
+  };
+  student?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+export async function getMyProofs(): Promise<ProofSubmission[]> {
+  const res = await api.get("/api/proofs/my");
+
+  return res.data.data;
+}
+
+export async function getAllProofs(
+  filters?: {
+    eventId?: string;
+    studentId?: string;
+    status?: string;
+  }
+): Promise<ProofSubmission[]> {
+  const params = new URLSearchParams();
+
+  if (filters?.eventId) {
+    params.set("eventId", filters.eventId);
+  }
+
+  if (filters?.studentId) {
+    params.set("studentId", filters.studentId);
+  }
+
+  if (filters?.status) {
+    params.set("status", filters.status);
+  }
+
+  const query = params.toString();
+
+  const res = await api.get(
+    query ? `/api/proofs?${query}` : "/api/proofs"
+  );
+
+  return res.data.data;
+}
+
+export async function getProofDetail(
+  id: string
+): Promise<ProofSubmission> {
+  const res = await api.get(`/api/proofs/${id}`);
+
+  return res.data.data;
+}
+
+export async function submitProof(
+  eventId: string,
+  file: File
+): Promise<ProofSubmission> {
+  const formData = new FormData();
+
+  formData.append("eventId", eventId);
+  formData.append("file", file);
+
+  const res = await api.post(
+    "/api/proofs",
+    formData
+  );
+
+  return res.data.data;
+}
+
+export async function replaceProofFile(
+  proofId: string,
+  file: File
+): Promise<ProofSubmission> {
+  const formData = new FormData();
+
+  formData.append("file", file);
+
+  const res = await api.put(
+    `/api/proofs/${proofId}/file`,
+    formData
+  );
+
+  return res.data.data;
+}
+
+export async function reviewProof(
+  proofId: string,
+  status: "APPROVED" | "REJECTED",
+  remarks?: string
+): Promise<ProofSubmission> {
+  const res = await api.patch(
+    `/api/proofs/${proofId}/review`,
+    {
+      status,
+      remarks,
+    }
+  );
+
   return res.data.data;
 }

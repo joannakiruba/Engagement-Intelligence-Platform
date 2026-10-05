@@ -13,13 +13,15 @@ import usersRoutes from './routes/users.routes';
 import assessmentRoutes from './routes/assessments.routes';
 import batchRoutes from './routes/batches.routes';
 import sessionRoutes from './routes/sessions.routes';
-import { closeQueues } from './jobs/queue';
 import { closeEmailTransporter } from './services/email.service';
 import attendanceRoutes from './routes/attendance.routes';
 import feedbackRoutes from './routes/feedback.routes';
 import mentorAssignmentRoutes from './routes/mentor-assignments.routes';
 import riskRoutes from './routes/risk.routes';
 import mentorAlertRoutes from './routes/mentor-alerts.routes';
+import taskRoutes from './routes/tasks.routes';
+import proofRoutes from './routes/proofs.routes';
+import eventRoutes from './routes/events.routes';
 import engagementRoutes from './routes/engagement.routes';
 
 const app = express();
@@ -50,20 +52,26 @@ app.use('/api/feedback', authenticateJwt, feedbackRoutes);
 app.use('/api/mentor-assignments', authenticateJwt, mentorAssignmentRoutes);
 app.use('/api/risk', authenticateJwt, riskRoutes);
 app.use('/api/mentor-alerts', authenticateJwt, mentorAlertRoutes);
+app.use('/api/tasks', authenticateJwt, taskRoutes);
+app.use('/api/events', authenticateJwt, eventRoutes);
+app.use('/api/proofs', authenticateJwt, proofRoutes);
 app.use('/api/engagement', authenticateJwt, engagementRoutes);
 
 app.use(errorHandler);
 
 if (require.main === module) {
-  // Import workers to start them (only in main process, not during tests)
-  import('./jobs/email.job');
-  import('./jobs/alert.job');
-  import('./jobs/weekly-report.job');
-
   const server = app.listen(config.port, () => {
     logger.info(`Server running on port ${config.port} (${config.nodeEnv})`);
-    logger.info('BullMQ workers initialized');
   });
+
+  // Start BullMQ workers in background — non-blocking, server works without Redis
+  Promise.all([
+    import('./jobs/email.job.js'),
+    import('./jobs/alert.job.js'),
+    import('./jobs/weekly-report.job.js'),
+  ])
+    .then(() => logger.info('BullMQ workers initialized'))
+    .catch((err) => logger.warn('BullMQ workers failed to start (Redis may be unavailable)', { error: (err as Error).message }));
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
@@ -73,17 +81,18 @@ if (require.main === module) {
       logger.info('HTTP server closed');
 
       try {
+        const { closeQueues } = await import('./jobs/queue.js');
         await closeQueues();
+      } catch { /* Redis may not be available */ }
+
+      try {
         await closeEmailTransporter();
-        logger.info('All services closed');
-        process.exit(0);
-      } catch (error) {
-        logger.error('Error during shutdown', { error: (error as Error).message });
-        process.exit(1);
-      }
+      } catch { /* ignore */ }
+
+      logger.info('All services closed');
+      process.exit(0);
     });
 
-    // Force shutdown after 10 seconds
     setTimeout(() => {
       logger.error('Forced shutdown after timeout');
       process.exit(1);

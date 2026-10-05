@@ -316,7 +316,25 @@ async function main() {
     console.log(`  Session: ${topic.title} (Batch ${(i % batchIds.length) + 1})`);
   }
 
-  // ── Phase 9: Attendance (200 records) ──
+  // ── Phase 9: Attendance Windows + Attendance (200 records) ──
+
+  console.log('\nSeeding attendance windows...');
+  const windowMap: Record<string, string> = {};
+
+  for (let i = 0; i < sessionIds.length; i++) {
+    const sessionId = sessionIds[i];
+    const dayOff = i + 1;
+    const window = await prisma.attendanceWindow.create({
+      data: {
+        sessionId,
+        label: 'Main Window',
+        startTime: sessionTime(dayOff, 7, 45),
+        endTime: sessionTime(dayOff, 8, 5),
+      },
+    });
+    windowMap[sessionId] = window.id;
+  }
+  console.log(`  ${sessionIds.length} attendance windows created.`);
 
   console.log('\nSeeding attendance records...');
   let attendanceCount = 0;
@@ -328,6 +346,7 @@ async function main() {
     const start = batchIndex * studentsPerBatch;
     const end = Math.min(start + studentsPerBatch, studentIds.length);
     const batchStudents = studentIds.slice(start, end);
+    const windowId = windowMap[sessionId];
 
     for (const studentId of batchStudents) {
       if (attendanceCount >= 200) break;
@@ -338,9 +357,9 @@ async function main() {
         : null;
 
       await prisma.attendance.upsert({
-        where: { sessionId_studentId: { sessionId, studentId } },
+        where: { windowId_studentId: { windowId, studentId } },
         update: {},
-        create: { sessionId, studentId, status, checkInTime },
+        create: { windowId, sessionId, studentId, status, checkInTime },
       });
       attendanceCount++;
     }
