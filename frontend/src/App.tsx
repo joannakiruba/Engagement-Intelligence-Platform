@@ -21,6 +21,10 @@ import ExcusedReview from "./pages/attendance/ExcusedReview";
 import FeedbackList from "./pages/feedback/FeedbackList";
 import FeedbackForm from "./pages/feedback/FeedbackForm";
 import FeedbackDetail from "./pages/feedback/FeedbackDetail";
+import EngagementDashboard from "./pages/dashboard/EngagementDashboard";
+import BatchEngagement from "./pages/dashboard/BatchEngagement";
+import StudentEngagement from "./pages/dashboard/StudentEngagement";
+
 import {
   getEvents,
   getMyProofs,
@@ -41,11 +45,19 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function RequireRole({ roles, children }: { roles: string[]; children: React.ReactNode }) {
+function RequireRole({
+  roles,
+  children,
+}: {
+  roles: string[];
+  children: React.ReactNode;
+}) {
   const { user } = useAuth();
+
   if (!user || !roles.includes(user.role)) {
     return <Navigate to="/" replace />;
   }
+
   return <>{children}</>;
 }
 
@@ -79,6 +91,7 @@ function AppNav() {
         <Link to="/" className="text-lg font-semibold text-gray-800">
           EIP
         </Link>
+
         {user &&
           getNavLinks(user.role).map((link) => (
             <Link
@@ -89,15 +102,25 @@ function AppNav() {
               {link.label}
             </Link>
           ))}
+
+        <Link to="/dashboard" className="text-gray-600 hover:text-gray-900">
+          Dashboard
+        </Link>
+
         {user && (
           <>
-            <Link to="/profile" className="text-gray-600 hover:text-gray-900">
+            <Link
+              to="/profile"
+              className="text-gray-600 hover:text-gray-900"
+            >
               My Profile
             </Link>
+
             <span className="ml-auto text-sm text-gray-500">
               {user.name}{" "}
               <span className="text-xs text-gray-400">({user.role})</span>
             </span>
+
             <button
               onClick={logout}
               className="text-sm text-gray-600 hover:text-gray-900"
@@ -106,6 +129,7 @@ function AppNav() {
             </button>
           </>
         )}
+
         {!user && (
           <Link
             to="/login"
@@ -125,9 +149,12 @@ function StatusBadge({ status }: { status: string }) {
     APPROVED: "bg-green-100 text-green-800",
     REJECTED: "bg-red-100 text-red-800",
   };
+
   return (
     <span
-      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${styles[status] || "bg-gray-100 text-gray-800"}`}
+      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+        styles[status] || "bg-gray-100 text-gray-800"
+      }`}
     >
       {status}
     </span>
@@ -144,20 +171,16 @@ function ProofsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Student: new submission state
   const [selectedEventId, setSelectedEventId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Student: replace file state
   const [replacingId, setReplacingId] = useState<string | null>(null);
   const replaceFileRef = useRef<HTMLInputElement>(null);
 
-  // Admin: filters
   const [filterStatus, setFilterStatus] = useState("");
   const [filterEventId, setFilterEventId] = useState("");
 
-  // Admin: review state
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewRemarks, setReviewRemarks] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
@@ -165,20 +188,25 @@ function ProofsPage() {
   async function loadData() {
     setLoading(true);
     setError("");
+
     try {
       const evts = await getEvents();
       setEvents(evts);
+
       if (isStudent) {
         setProofs(await getMyProofs());
       } else {
         const filters: Record<string, string> = {};
+
         if (filterStatus) filters.status = filterStatus;
         if (filterEventId) filters.eventId = filterEventId;
+
         setProofs(await getAllProofs(filters));
       }
     } catch {
       setError("Failed to load data.");
     }
+
     setLoading(false);
   }
 
@@ -186,81 +214,136 @@ function ProofsPage() {
     loadData();
   }, []);
 
-  function getExistingProof(eventId: string): ProofSubmission | undefined {
+  function getExistingProof(
+    eventId: string
+  ): ProofSubmission | undefined {
     return proofs.find((p) => p.eventId === eventId);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
     if (!selectedEventId || !fileInputRef.current?.files?.[0]) return;
+
     setSubmitting(true);
     setError("");
     setSuccess("");
+
     try {
-      await submitProof(selectedEventId, fileInputRef.current.files[0]);
+      await submitProof(
+        selectedEventId,
+        fileInputRef.current.files[0]
+      );
+
       setSuccess("Proof submitted successfully.");
       setSelectedEventId("");
-      if (fileInputRef.current) fileInputRef.current.value = "";
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
       await loadData();
     } catch (err: any) {
-      setError(err.response?.data?.error || "Failed to submit proof.");
+      setError(
+        err.response?.data?.error || "Failed to submit proof."
+      );
     }
+
     setSubmitting(false);
   }
 
   async function handleReplace(proofId: string) {
     const file = replaceFileRef.current?.files?.[0];
+
     if (!file) return;
+
     setSubmitting(true);
     setError("");
     setSuccess("");
+
     try {
       await replaceProofFile(proofId, file);
-      setSuccess("File replaced successfully. Status reset to PENDING.");
+
+      setSuccess(
+        "File replaced successfully. Status reset to PENDING."
+      );
+
       setReplacingId(null);
-      if (replaceFileRef.current) replaceFileRef.current.value = "";
+
+      if (replaceFileRef.current) {
+        replaceFileRef.current.value = "";
+      }
+
       await loadData();
     } catch (err: any) {
-      setError(err.response?.data?.error || "Failed to replace file.");
+      setError(
+        err.response?.data?.error || "Failed to replace file."
+      );
     }
+
     setSubmitting(false);
   }
 
-  async function handleReview(proofId: string, status: "APPROVED" | "REJECTED") {
+  async function handleReview(
+    proofId: string,
+    status: "APPROVED" | "REJECTED"
+  ) {
     setReviewSaving(true);
     setError("");
     setSuccess("");
+
     try {
-      await reviewProof(proofId, status, reviewRemarks || undefined);
-      setSuccess(`Proof ${status.toLowerCase()} successfully.`);
+      await reviewProof(
+        proofId,
+        status,
+        reviewRemarks || undefined
+      );
+
+      setSuccess(
+        `Proof ${status.toLowerCase()} successfully.`
+      );
+
       setReviewingId(null);
       setReviewRemarks("");
+
       await loadData();
     } catch (err: any) {
-      setError(err.response?.data?.error || "Failed to review proof.");
+      setError(
+        err.response?.data?.error || "Failed to review proof."
+      );
     }
+
     setReviewSaving(false);
   }
 
   async function handleAdminFilter(e: React.FormEvent) {
     e.preventDefault();
+
     setLoading(true);
+
     try {
       const filters: Record<string, string> = {};
+
       if (filterStatus) filters.status = filterStatus;
       if (filterEventId) filters.eventId = filterEventId;
+
       setProofs(await getAllProofs(filters));
     } catch {
       setError("Failed to load proofs.");
     }
+
     setLoading(false);
   }
 
-  if (loading) return <p className="text-gray-500">Loading...</p>;
+  if (loading) {
+    return <p className="text-gray-500">Loading...</p>;
+  }
 
-  // ---- Student View ----
   if (isStudent) {
-    const eventsWithoutProof = events.filter((e) => !getExistingProof(e.id));
+    const eventsWithoutProof = events.filter(
+      (e) => !getExistingProof(e.id)
+    );
+
     return (
       <div>
         <h1 className="text-2xl font-bold text-gray-900 mb-6">
@@ -268,38 +351,51 @@ function ProofsPage() {
         </h1>
 
         {error && <p className="text-red-600 mb-4">{error}</p>}
-        {success && <p className="text-green-600 mb-4">{success}</p>}
+        {success && (
+          <p className="text-green-600 mb-4">{success}</p>
+        )}
 
-        {/* Submit new proof */}
         {eventsWithoutProof.length > 0 && (
           <div className="bg-white border rounded p-6 mb-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-3">
               Submit New Proof
             </h2>
-            <form onSubmit={handleSubmit} className="space-y-3 max-w-lg">
+
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-3 max-w-lg"
+            >
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Event
                 </label>
+
                 <select
                   value={selectedEventId}
-                  onChange={(e) => setSelectedEventId(e.target.value)}
+                  onChange={(e) =>
+                    setSelectedEventId(e.target.value)
+                  }
                   required
                   className="w-full border rounded px-3 py-2 text-sm"
                 >
                   <option value="">Select an event...</option>
+
                   {eventsWithoutProof.map((ev) => (
                     <option key={ev.id} value={ev.id}>
                       {ev.title} ({ev.eventType}) —{" "}
-                      {new Date(ev.eventDate).toLocaleDateString()}
+                      {new Date(
+                        ev.eventDate
+                      ).toLocaleDateString()}
                     </option>
                   ))}
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   File (PNG, JPEG, GIF, or PDF — max 10 MB)
                 </label>
+
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -308,18 +404,20 @@ function ProofsPage() {
                   className="w-full border rounded px-3 py-2 text-sm"
                 />
               </div>
+
               <button
                 type="submit"
                 disabled={submitting}
                 className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
               >
-                {submitting ? "Uploading..." : "Submit Proof"}
+                {submitting
+                  ? "Uploading..."
+                  : "Submit Proof"}
               </button>
             </form>
           </div>
         )}
 
-        {/* Existing submissions */}
         {proofs.length === 0 ? (
           <p className="text-gray-500">No submissions yet.</p>
         ) : (
@@ -327,20 +425,28 @@ function ProofsPage() {
             <h2 className="text-lg font-semibold text-gray-800">
               Your Submissions
             </h2>
+
             {proofs.map((proof) => (
-              <div key={proof.id} className="bg-white border rounded p-4">
+              <div
+                key={proof.id}
+                className="bg-white border rounded p-4"
+              >
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="font-medium text-gray-900">
                       {proof.event?.title ?? proof.eventId}
                     </p>
+
                     <p className="text-sm text-gray-500">
                       {proof.event?.eventType} —{" "}
                       {proof.event?.eventDate
-                        ? new Date(proof.event.eventDate).toLocaleDateString()
+                        ? new Date(
+                            proof.event.eventDate
+                          ).toLocaleDateString()
                         : ""}
                     </p>
                   </div>
+
                   <StatusBadge status={proof.status} />
                 </div>
 
@@ -353,19 +459,27 @@ function ProofsPage() {
                   >
                     {proof.fileName}
                   </a>
+
                   <span className="text-gray-400">
-                    Submitted {new Date(proof.createdAt).toLocaleDateString()}
+                    Submitted{" "}
+                    {new Date(
+                      proof.createdAt
+                    ).toLocaleDateString()}
                   </span>
                 </div>
 
                 {proof.remarks && (
                   <div className="mt-2 bg-gray-50 border rounded px-3 py-2 text-sm">
-                    <span className="text-gray-500">Reviewer remarks: </span>
-                    <span className="text-gray-700">{proof.remarks}</span>
+                    <span className="text-gray-500">
+                      Reviewer remarks:{" "}
+                    </span>
+
+                    <span className="text-gray-700">
+                      {proof.remarks}
+                    </span>
                   </div>
                 )}
 
-                {/* Replace file */}
                 <div className="mt-3 border-t pt-3">
                   {replacingId === proof.id ? (
                     <div className="flex items-center gap-2">
@@ -375,15 +489,23 @@ function ProofsPage() {
                         accept="image/png,image/jpeg,image/gif,application/pdf"
                         className="border rounded px-2 py-1 text-sm flex-1"
                       />
+
                       <button
-                        onClick={() => handleReplace(proof.id)}
+                        onClick={() =>
+                          handleReplace(proof.id)
+                        }
                         disabled={submitting}
                         className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
                       >
-                        {submitting ? "Uploading..." : "Upload"}
+                        {submitting
+                          ? "Uploading..."
+                          : "Upload"}
                       </button>
+
                       <button
-                        onClick={() => setReplacingId(null)}
+                        onClick={() =>
+                          setReplacingId(null)
+                        }
                         className="text-sm text-gray-600 hover:underline"
                       >
                         Cancel
@@ -391,15 +513,19 @@ function ProofsPage() {
                     </div>
                   ) : (
                     <button
-                      onClick={() => setReplacingId(proof.id)}
+                      onClick={() =>
+                        setReplacingId(proof.id)
+                      }
                       className="text-sm text-gray-600 hover:text-gray-900 bg-gray-100 px-3 py-1 rounded hover:bg-gray-200"
                     >
                       Replace File
                     </button>
                   )}
+
                   {replacingId === proof.id && (
                     <p className="text-xs text-gray-400 mt-1">
-                      Replacing your file resets the review status to PENDING.
+                      Replacing your file resets the review status
+                      to PENDING.
                     </p>
                   )}
                 </div>
@@ -411,7 +537,6 @@ function ProofsPage() {
     );
   }
 
-  // ---- Admin / Trainer View ----
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">
@@ -419,18 +544,24 @@ function ProofsPage() {
       </h1>
 
       {error && <p className="text-red-600 mb-4">{error}</p>}
-      {success && <p className="text-green-600 mb-4">{success}</p>}
+      {success && (
+        <p className="text-green-600 mb-4">{success}</p>
+      )}
 
-      {/* Filters */}
       <form
         onSubmit={handleAdminFilter}
         className="flex flex-wrap gap-3 mb-4 items-end"
       >
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Status</label>
+          <label className="block text-xs text-gray-500 mb-1">
+            Status
+          </label>
+
           <select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
+            onChange={(e) =>
+              setFilterStatus(e.target.value)
+            }
             className="border rounded px-3 py-1.5 text-sm"
           >
             <option value="">All</option>
@@ -439,14 +570,21 @@ function ProofsPage() {
             <option value="REJECTED">Rejected</option>
           </select>
         </div>
+
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Event</label>
+          <label className="block text-xs text-gray-500 mb-1">
+            Event
+          </label>
+
           <select
             value={filterEventId}
-            onChange={(e) => setFilterEventId(e.target.value)}
+            onChange={(e) =>
+              setFilterEventId(e.target.value)
+            }
             className="border rounded px-3 py-1.5 text-sm w-60"
           >
             <option value="">All Events</option>
+
             {events.map((ev) => (
               <option key={ev.id} value={ev.id}>
                 {ev.title}
@@ -454,6 +592,7 @@ function ProofsPage() {
             ))}
           </select>
         </div>
+
         <button
           type="submit"
           className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700"
@@ -462,9 +601,10 @@ function ProofsPage() {
         </button>
       </form>
 
-      {/* Table */}
       {proofs.length === 0 ? (
-        <p className="text-gray-500">No proof submissions found.</p>
+        <p className="text-gray-500">
+          No proof submissions found.
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full bg-white border rounded">
@@ -490,27 +630,37 @@ function ProofsPage() {
                 </th>
               </tr>
             </thead>
+
             <tbody className="divide-y">
               {proofs.map((proof) => (
-                <tr key={proof.id} className="hover:bg-gray-50">
+                <tr
+                  key={proof.id}
+                  className="hover:bg-gray-50"
+                >
                   <td className="px-4 py-2 text-sm">
                     <div className="font-medium">
-                      {proof.student?.name ?? proof.studentId}
+                      {proof.student?.name ??
+                        proof.studentId}
                     </div>
+
                     {proof.student?.email && (
                       <div className="text-xs text-gray-400">
                         {proof.student.email}
                       </div>
                     )}
                   </td>
+
                   <td className="px-4 py-2 text-sm">
-                    {proof.event?.title ?? proof.eventId}
+                    {proof.event?.title ??
+                      proof.eventId}
+
                     {proof.event?.eventType && (
                       <span className="text-xs text-gray-400 ml-1">
                         ({proof.event.eventType})
                       </span>
                     )}
                   </td>
+
                   <td className="px-4 py-2 text-sm">
                     <a
                       href={proof.fileUrl}
@@ -521,42 +671,65 @@ function ProofsPage() {
                       {proof.fileName}
                     </a>
                   </td>
+
                   <td className="px-4 py-2 text-sm text-gray-500">
-                    {new Date(proof.createdAt).toLocaleDateString()}
+                    {new Date(
+                      proof.createdAt
+                    ).toLocaleDateString()}
                   </td>
+
                   <td className="px-4 py-2 text-sm">
                     <StatusBadge status={proof.status} />
+
                     {proof.remarks && (
                       <p className="text-xs text-gray-400 mt-1 max-w-xs truncate">
                         {proof.remarks}
                       </p>
                     )}
                   </td>
+
                   <td className="px-4 py-2 text-sm">
                     {reviewingId === proof.id ? (
                       <div className="space-y-2">
                         <input
                           type="text"
                           value={reviewRemarks}
-                          onChange={(e) => setReviewRemarks(e.target.value)}
+                          onChange={(e) =>
+                            setReviewRemarks(
+                              e.target.value
+                            )
+                          }
                           placeholder="Remarks (optional)"
                           className="border rounded px-2 py-1 text-sm w-full"
                         />
+
                         <div className="flex gap-1">
                           <button
-                            onClick={() => handleReview(proof.id, "APPROVED")}
+                            onClick={() =>
+                              handleReview(
+                                proof.id,
+                                "APPROVED"
+                              )
+                            }
                             disabled={reviewSaving}
                             className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:opacity-50"
                           >
                             Approve
                           </button>
+
                           <button
-                            onClick={() => handleReview(proof.id, "REJECTED")}
+                            onClick={() =>
+                              handleReview(
+                                proof.id,
+                                "REJECTED"
+                              )
+                            }
                             disabled={reviewSaving}
                             className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 disabled:opacity-50"
                           >
                             Reject
                           </button>
+
                           <button
                             onClick={() => {
                               setReviewingId(null);
@@ -570,7 +743,9 @@ function ProofsPage() {
                       </div>
                     ) : (
                       <button
-                        onClick={() => setReviewingId(proof.id)}
+                        onClick={() =>
+                          setReviewingId(proof.id)
+                        }
                         className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
                       >
                         Review
@@ -591,6 +766,7 @@ function AppRoutes() {
   return (
     <div className="min-h-screen bg-gray-50">
       <AppNav />
+
       <main className="max-w-7xl mx-auto px-4 py-6">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -603,11 +779,40 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/profile"
             element={
               <RequireAuth>
                 <ProfilePage />
+              </RequireAuth>
+            }
+          />
+
+          {/* Engagement Dashboard */}
+          <Route
+            path="/dashboard"
+            element={
+              <RequireAuth>
+                <EngagementDashboard />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/dashboard/batch/:batchId"
+            element={
+              <RequireAuth>
+                <BatchEngagement />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/dashboard/student/:studentId"
+            element={
+              <RequireAuth>
+                <StudentEngagement />
               </RequireAuth>
             }
           />
@@ -621,6 +826,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/assessments/create"
             element={
@@ -631,6 +837,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/assessments/:id/edit"
             element={
@@ -641,6 +848,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/assessments/:id"
             element={
@@ -649,6 +857,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/assessments/:id/scores"
             element={
@@ -659,6 +868,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/assessments/:id/bulk-upload"
             element={
@@ -679,6 +889,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/batches/create"
             element={
@@ -689,6 +900,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/batches/:id/edit"
             element={
@@ -699,6 +911,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/batches/:id"
             element={
@@ -719,6 +932,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/attendance/session/:sessionId"
             element={
@@ -727,6 +941,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/attendance/student/:studentId"
             element={
@@ -735,6 +950,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/attendance/qr/:windowId"
             element={
@@ -745,6 +961,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/attendance/check-in"
             element={
@@ -755,6 +972,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/attendance/report/:batchId"
             element={
@@ -763,6 +981,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/attendance/excused"
             element={
@@ -793,6 +1012,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/feedback/create/:sessionId"
             element={
@@ -803,6 +1023,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/feedback/create"
             element={
@@ -813,6 +1034,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/feedback/:id/edit"
             element={
@@ -823,6 +1045,7 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/feedback/:id"
             element={
