@@ -22,6 +22,7 @@ import mentorAlertRoutes from './routes/mentor-alerts.routes';
 import taskRoutes from './routes/tasks.routes';
 import proofRoutes from './routes/proofs.routes';
 import eventRoutes from './routes/events.routes';
+import engagementRoutes from './routes/engagement.routes';
 
 const app = express();
 
@@ -54,6 +55,7 @@ app.use('/api/mentor-alerts', authenticateJwt, mentorAlertRoutes);
 app.use('/api/tasks', authenticateJwt, taskRoutes);
 app.use('/api/events', authenticateJwt, eventRoutes);
 app.use('/api/proofs', authenticateJwt, proofRoutes);
+app.use('/api/engagement', authenticateJwt, engagementRoutes);
 
 app.use(errorHandler);
 
