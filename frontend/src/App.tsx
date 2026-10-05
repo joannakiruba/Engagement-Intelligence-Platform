@@ -30,6 +30,33 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RequireRole({ roles, children }: { roles: string[]; children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user || !roles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+}
+
+function getNavLinks(role: string): { label: string; to: string }[] {
+  const links: { label: string; to: string }[] = [];
+
+  links.push({ label: "Assessments", to: "/assessments" });
+  links.push({ label: "Batches", to: "/batches" });
+
+  if (role === "STUDENT") {
+    links.push({ label: "Check In", to: "/attendance/check-in" });
+  } else if (["TRAINER", "ADMIN"].includes(role)) {
+    links.push({ label: "Attendance", to: "/attendance/excused" });
+  }
+
+  if (role !== "COORDINATOR") {
+    links.push({ label: "Feedback", to: "/feedback" });
+  }
+
+  return links;
+}
+
 function AppNav() {
   const { user, logout } = useAuth();
 
@@ -39,24 +66,25 @@ function AppNav() {
         <Link to="/" className="text-lg font-semibold text-gray-800">
           EIP
         </Link>
-        <Link to="/assessments" className="text-gray-600 hover:text-gray-900">
-          Assessments
-        </Link>
-        <Link to="/batches" className="text-gray-600 hover:text-gray-900">
-          Batches
-        </Link>
-        <Link to="/attendance" className="text-gray-600 hover:text-gray-900">
-          Attendance
-        </Link>
-        <Link to="/feedback" className="text-gray-600 hover:text-gray-900">
-          Feedback
-        </Link>
+        {user &&
+          getNavLinks(user.role).map((link) => (
+            <Link
+              key={link.to}
+              to={link.to}
+              className="text-gray-600 hover:text-gray-900"
+            >
+              {link.label}
+            </Link>
+          ))}
         {user && (
           <>
             <Link to="/profile" className="text-gray-600 hover:text-gray-900">
               My Profile
             </Link>
-            <span className="ml-auto text-sm text-gray-500">{user.name}</span>
+            <span className="ml-auto text-sm text-gray-500">
+              {user.name}{" "}
+              <span className="text-xs text-gray-400">({user.role})</span>
+            </span>
             <button
               onClick={logout}
               className="text-sm text-gray-600 hover:text-gray-900"
@@ -66,7 +94,10 @@ function AppNav() {
           </>
         )}
         {!user && (
-          <Link to="/login" className="ml-auto text-gray-600 hover:text-gray-900">
+          <Link
+            to="/login"
+            className="ml-auto text-gray-600 hover:text-gray-900"
+          >
             Sign in
           </Link>
         )}
@@ -82,6 +113,15 @@ function AppRoutes() {
       <main className="max-w-7xl mx-auto px-4 py-6">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+
+          <Route
+            path="/"
+            element={
+              <RequireAuth>
+                <AssessmentList />
+              </RequireAuth>
+            }
+          />
           <Route
             path="/profile"
             element={
@@ -90,29 +130,236 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
-          <Route path="/" element={<AssessmentList />} />
-          <Route path="/assessments" element={<AssessmentList />} />
-          <Route path="/assessments/create" element={<AssessmentCreate />} />
-          <Route path="/assessments/:id/edit" element={<AssessmentCreate />} />
-          <Route path="/assessments/:id" element={<AssessmentDetail />} />
-          <Route path="/assessments/:id/scores" element={<ScoreEntry />} />
-          <Route path="/assessments/:id/bulk-upload" element={<BulkUpload />} />
-          <Route path="/batches" element={<BatchList />} />
-          <Route path="/batches/create" element={<BatchCreate />} />
-          <Route path="/batches/:id/edit" element={<BatchCreate />} />
-          <Route path="/batches/:id" element={<BatchDetail />} />
-          <Route path="/attendance/mark/:sessionId" element={<MarkAttendance />} />
-          <Route path="/attendance/session/:sessionId" element={<SessionAttendance />} />
-          <Route path="/attendance/student/:studentId" element={<StudentAttendance />} />
-          <Route path="/attendance/qr/:windowId" element={<QRFullscreen />} />
-          <Route path="/attendance/check-in" element={<StudentCheckIn />} />
-          <Route path="/attendance/report/:batchId" element={<AttendanceReport />} />
-          <Route path="/attendance/excused" element={<ExcusedReview />} />
-          <Route path="/feedback" element={<FeedbackList />} />
-          <Route path="/feedback/create/:sessionId" element={<FeedbackForm />} />
-          <Route path="/feedback/create" element={<FeedbackForm />} />
-          <Route path="/feedback/:id/edit" element={<FeedbackForm />} />
-          <Route path="/feedback/:id" element={<FeedbackDetail />} />
+
+          {/* Assessments */}
+          <Route
+            path="/assessments"
+            element={
+              <RequireAuth>
+                <AssessmentList />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/assessments/create"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER", "ADMIN"]}>
+                  <AssessmentCreate />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/assessments/:id/edit"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER", "ADMIN"]}>
+                  <AssessmentCreate />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/assessments/:id"
+            element={
+              <RequireAuth>
+                <AssessmentDetail />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/assessments/:id/scores"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER", "ADMIN"]}>
+                  <ScoreEntry />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/assessments/:id/bulk-upload"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER", "ADMIN"]}>
+                  <BulkUpload />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+
+          {/* Batches */}
+          <Route
+            path="/batches"
+            element={
+              <RequireAuth>
+                <BatchList />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/batches/create"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["ADMIN"]}>
+                  <BatchCreate />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/batches/:id/edit"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["ADMIN"]}>
+                  <BatchCreate />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/batches/:id"
+            element={
+              <RequireAuth>
+                <BatchDetail />
+              </RequireAuth>
+            }
+          />
+
+          {/* Attendance */}
+          <Route
+            path="/attendance/mark/:sessionId"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER"]}>
+                  <MarkAttendance />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/attendance/session/:sessionId"
+            element={
+              <RequireAuth>
+                <SessionAttendance />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/attendance/student/:studentId"
+            element={
+              <RequireAuth>
+                <StudentAttendance />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/attendance/qr/:windowId"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER"]}>
+                  <QRFullscreen />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/attendance/check-in"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["STUDENT"]}>
+                  <StudentCheckIn />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/attendance/report/:batchId"
+            element={
+              <RequireAuth>
+                <AttendanceReport />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/attendance/excused"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER", "ADMIN"]}>
+                  <ExcusedReview />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+
+          {/* Feedback */}
+          <Route
+            path="/feedback"
+            element={
+              <RequireAuth>
+                <RequireRole
+                  roles={[
+                    "STUDENT",
+                    "TRAINER",
+                    "FACULTY",
+                    "MENTOR",
+                    "ADMIN",
+                  ]}
+                >
+                  <FeedbackList />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/feedback/create/:sessionId"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER"]}>
+                  <FeedbackForm />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/feedback/create"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER"]}>
+                  <FeedbackForm />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/feedback/:id/edit"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER"]}>
+                  <FeedbackForm />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/feedback/:id"
+            element={
+              <RequireAuth>
+                <RequireRole
+                  roles={[
+                    "STUDENT",
+                    "TRAINER",
+                    "FACULTY",
+                    "MENTOR",
+                    "ADMIN",
+                  ]}
+                >
+                  <FeedbackDetail />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
         </Routes>
       </main>
     </div>

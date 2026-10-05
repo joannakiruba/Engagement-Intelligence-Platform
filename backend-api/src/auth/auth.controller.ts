@@ -6,7 +6,9 @@ import { signAccessToken } from './jwt.middleware';
 import { logger } from '../utils/logger';
 import prisma from '../lib/prisma';
 import { hashToken, generateRawToken } from '../utils/token';
-import { queueActivationEmail, queuePasswordResetEmail } from '../jobs/queue';
+async function getQueues() {
+  return import('../jobs/queue.js');
+}
 
 const BCRYPT_ROUNDS = 10;
 
@@ -394,6 +396,7 @@ export async function resendActivation(req: Request, res: Response): Promise<voi
   logger.info('Activation token generated (email send pending)', { userId: user.id });
 
   // Queue activation email
+  const { queueActivationEmail } = await getQueues();
   await queueActivationEmail({
     userId: user.id,
     email: user.email,
@@ -437,6 +440,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     logger.info('Forgot-password for PENDING user → activation token generated', { userId: user.id });
 
     // Queue activation email for PENDING users
+    const { queueActivationEmail } = await getQueues();
     await queueActivationEmail({
       userId: user.id,
       email: user.email,
@@ -463,6 +467,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     logger.info('Password reset token generated', { userId: user.id });
 
     // Queue password reset email for ACTIVE users
+    const { queuePasswordResetEmail } = await getQueues();
     await queuePasswordResetEmail({
       userId: user.id,
       email: user.email,
