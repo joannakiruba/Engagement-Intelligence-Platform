@@ -51,4 +51,11 @@ export const config = {
   seed: {
     testPassword: process.env.SEED_TEST_PASSWORD,
   },
+
+  weeklyReport: {
+    enabled: process.env.WEEKLY_REPORT_ENABLED !== 'false',
+    dayOfWeek: parseInt(process.env.WEEKLY_REPORT_DAY || '1', 10),
+    hour: parseInt(process.env.WEEKLY_REPORT_HOUR || '9', 10),
+    timezone: process.env.WEEKLY_REPORT_TZ || 'Asia/Kolkata',
+  },
 };

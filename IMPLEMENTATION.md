@@ -1438,8 +1438,205 @@ Ticket 14 is complete only when **all** of the following are satisfied:
 - [ ] No regressions in other modules' tests or builds
 
 ### Boundaries
-- [ ] Weekly Risk Report is NOT implemented (Module 13 responsibility)
+- [x] Weekly Risk Report is implemented in Ticket 15 (see below)
 - [ ] Mentor Alert System is NOT implemented (Module 14-alerts responsibility)
 - [ ] Intervention Workflow is NOT implemented (Modules 15-16 responsibility)
-- [ ] No weekly period fields, cron jobs, or scheduled execution are added
 - [ ] `InterventionOutcome` is NOT mapped directly to risk level labels
+
+---
+
+# Ticket 15 — Weekly Risk Analysis Report
+
+## Implementation Summary
+
+Ticket 15 implements the Weekly Risk Analysis Report module, which generates and emails periodic risk summaries to mentors for their assigned at-risk students.
+
+### Architecture Decisions
+
+- **No new Prisma models**: reuses existing `RiskScore`, `User`, `MentorAssignment`
+- **Pattern B**: Route → Controller → Service (matches existing risk module)
+- **Batch context via JSON**: `RiskScore.factors.scope.batchId` — PostgreSQL JSON operators CAN query this field (e.g., `factors->'scope'->>'batchId'`), but the service extracts it in application code for simplicity
+- **BullMQ scheduling**: uses `upsertJobScheduler` (verified compatible with BullMQ 6.3.8)
+- **Job deduplication**: deterministic jobId per mentor+week prevents duplicate dispatch on retry
+
+### Timezone and Schedule
+
+| Setting | Default | Environment Variable |
+|---------|---------|---------------------|
+| Day of week | Monday (1) | `WEEKLY_REPORT_DAY` |
+| Hour | 9 (09:00) | `WEEKLY_REPORT_HOUR` |
+| Timezone | Asia/Kolkata | `WEEKLY_REPORT_TZ` |
+| Enabled | true | `WEEKLY_REPORT_ENABLED` |
+
+Cron expression: `0 9 * * 1` (Monday at 09:00 Asia/Kolkata by default).
+
+**Scheduling timezone vs. reporting-period timezone are separate concerns.** The cron expression controls when the job fires. The reporting period is always computed relative to the configured timezone (default `Asia/Kolkata`).
+
+`computeWeekBounds(referenceDate?, timezone?)` returns `[weekStart, weekEnd)` in UTC, where the boundaries correspond to Monday 00:00 in the specified IANA timezone. Consecutive weeks never overlap: `week1.weekEnd === week2.weekStart`.
+
+Example for Asia/Kolkata (UTC+5:30): week starting 2026-09-28 IST yields `weekStart = 2026-09-27T18:30:00.000Z`, `weekEnd = 2026-10-04T18:30:00.000Z`.
+
+The timezone offset is computed dynamically using `toLocaleString` with the IANA timezone, so DST transitions are handled correctly for timezones that observe them (Asia/Kolkata does not observe DST).
+
+### Report Logic
+
+1. Fetch ALL risk scores for assigned students in `[weekStart, weekEnd)` — no pre-filtering
+2. Take the latest score per student (highest `generatedAt` wins)
+3. Filter for MEDIUM or HIGH risk level AFTER selecting the latest
+4. Fetch previous week scores in `[prevWeekStart, weekStart)` — exclusive, non-overlapping
+5. Compare trends only within the same batch context (`factors.scope.batchId`)
+6. Extract reasons from `factors.ruleBased` (attendance, assessment, feedback)
+7. Surface `dataAvailability` from `factors.dataAvailability`
+8. Sort by riskScore descending
+
+### Input Validation
+
+Custom date ranges on preview and trigger endpoints are **arbitrary historical look-back windows**, not weekly-aligned periods. They must:
+- Provide both `weekStart` and `weekEnd` (partial ranges rejected with 400)
+- Have `weekEnd > weekStart` (reversed/equal ranges rejected with 400)
+- Not exceed 31 days (prevents unbounded queries)
+- Parse as valid ISO-8601 dates
+
+The 31-day cap prevents expensive queries but does not enforce weekly semantics. Custom ranges are labelled as arbitrary date ranges, not "weekly reports."
+
+### HTTP Endpoints
+
+| Method | Path | Permission | Purpose |
+|--------|------|-----------|---------|
+| GET | `/api/weekly-reports/preview` | `weekly_reports:read:assigned` / `read:any` | Read-only report preview (no email side effect) |
+| POST | `/api/weekly-reports/trigger` | `weekly_reports:trigger` | Admin-only: queue reports for all mentors |
+| GET | `/api/weekly-reports/schedule` | `weekly_reports:read:assigned` / `read:any` | View schedule config (no secrets) |
+
+All endpoints require JWT authentication via `authenticateJwt` middleware.
+
+### Email Delivery
+
+- **Production**: requires `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` — throws if missing
+- **Development/Test**: uses nodemailer `streamTransport` (emails captured, not sent)
+- HTML email includes: student name, risk level, score, trend arrow, reasons, missing data warnings
+- Plain text alternative included
+
+### HTML Escaping (XSS Prevention)
+
+All dynamic text values inserted into the HTML email template are escaped via `escapeHtml()` in `email.service.ts`. This covers:
+- Student names
+- Mentor names
+- Risk level labels
+- Trend text
+- Reason strings
+
+The `escapeHtml()` function replaces `&`, `<`, `>`, `"`, and `'` with their HTML entity equivalents. Plain-text email is intentionally NOT escaped (entities would render as literal `&amp;` etc. in plain text clients).
+
+Tested with payloads including `<img src=x onerror=alert(1)>`, `O'Brien & Associates`, and HTML in reason strings.
+
+### Permissions Added (3)
+
+| Code | Roles |
+|------|-------|
+| `weekly_reports:read:assigned` | MENTOR, FACULTY, COORDINATOR, ADMIN |
+| `weekly_reports:read:any` | FACULTY, COORDINATOR, ADMIN |
+| `weekly_reports:trigger` | ADMIN |
+
+### Files Changed
+
+| File | Action |
+|------|--------|
+| `src/services/weekly-report.service.ts` | NEW — core report logic |
+| `src/controllers/weekly-report.controller.ts` | NEW — endpoint handlers |
+| `src/routes/weekly-report.routes.ts` | NEW — route definitions |
+| `src/validators/weekly-report.validator.ts` | NEW — Joi schemas |
+| `src/__tests__/weekly-report.test.ts` | NEW — 38 unit tests (includes 6 timezone-aware boundary tests) |
+| `src/__tests__/weekly-report-integration.test.ts` | NEW — 18 PostgreSQL integration tests |
+| `src/__tests__/weekly-report-redis.test.ts` | NEW — 7 Redis/BullMQ integration tests |
+| `src/__tests__/weekly-report-email.test.ts` | NEW — 16 email/escaping tests (7 escapeHtml unit + 9 rendering) |
+| `src/config/index.ts` | MODIFIED — weeklyReport config section |
+| `src/jobs/weekly-report.job.ts` | MODIFIED — delegates to service, uses upsertJobScheduler |
+| `src/jobs/queue.ts` | MODIFIED — fixed jobId to not contain `:` (BullMQ restriction) |
+| `src/services/email.service.ts` | MODIFIED — `escapeHtml()` for XSS prevention, reasons/dataAvailability in email, production SMTP guard |
+| `src/prisma/permission-catalog.ts` | MODIFIED — 3 new permissions |
+| `src/server.ts` | MODIFIED — mounted weekly-report routes, fixed dynamic imports to require() for CJS compatibility |
+| `src/swagger/swagger.json` | MODIFIED — 3 endpoint docs with 400 error responses |
+| `tests/auth-rbac.test.ts` | MODIFIED — permission count updated to 72 |
+
+### Verification Results (2026-10-05, final)
+
+**TypeScript check**: 0 errors. Clean `tsc --noEmit` and `tsc --build`.
+
+The 3 dynamic import errors that existed on upstream main (`import('./jobs/email.job')` etc. in `server.ts`) were fixed by switching to `require()` — the project uses CommonJS (`"module": "Node16"` in tsconfig), so dynamic `import()` does not resolve TS module paths. This is a minimal, correct fix.
+
+**Unit tests** (`weekly-report.test.ts`): 38 passed, 0 failed
+- computeWeekBounds (timezone-aware): 6 (IST exact boundaries, consecutive week non-overlap, Sunday evening UTC, UTC timezone, year rollover 2026→2027, default timezone check)
+- Latest-score selection: 2
+- Non-overlapping periods: 1
+- Reasons extraction: 2
+- Batch-context-aware comparisons: 5
+- Missing-data handling: 2
+- Edge cases: 4
+- Date range validation: 6
+- Preview endpoint: 7
+- Trigger endpoint: 2
+- Schedule endpoint: 1
+
+**PostgreSQL integration tests** (`weekly-report-integration.test.ts`): 18 passed, 0 failed (real PostgreSQL 16 via Docker on port 5433)
+- HIGH→LOW exclusion, LOW→HIGH inclusion, stored HIGH with low score
+- Same-batch comparison, different-batch N/A, missing baseline N/A
+- Null factors, unknown batch context, boundary inclusivity/exclusivity
+- Deterministic tie-breaking, mentor scope, nonexistent mentor, empty assignments
+- Reasons extraction from DB, JSON batch query proof, dataAvailability
+- Integration tests create and clean up only test-specific records; they coexist safely with a seeded database.
+
+**Redis integration tests** (`weekly-report-redis.test.ts`): 7 passed, 0 failed (real Redis 7 via Docker on port 6380)
+- upsertJobScheduler creates/updates schedulers
+- Idempotent repeated initialization
+- Worker processes jobs correctly
+- Duplicate jobId deduplication
+- Date serialization roundtrip
+- Retry preserves week boundaries
+
+**Email and escaping tests** (`weekly-report-email.test.ts`): 16 passed, 0 failed
+- escapeHtml unit tests (7): ampersand, less-than, greater-than, double quote, single quote, combined, empty string
+- Email rendering tests (9): XSS payload in student name blocked in HTML, HTML entities in mentor name, HTML in reasons, plain text preserves raw characters, weekly report delivery, HTML table structure, empty student list, missing data warnings, trend arrows
+
+**Full backend suite**: 832 passed, 0 skipped, 0 failed across 25 test suites
+- Includes all Ticket 15 tests (79 total: 38 unit + 18 integration + 7 Redis + 16 email)
+- Includes all Ticket 14 risk engine tests
+- Includes all Ticket 5 profile endpoint integration tests (37 tests — previously skipped, now pass with seeded database)
+- Includes auth-rbac tests (permission count updated to 72)
+- No regressions in any existing test suite
+
+### Demo Instructions
+
+```bash
+# 1. Start PostgreSQL and Redis
+docker run --name eip-pg -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=eip_test -p 5433:5432 -d --rm postgres:16-alpine
+docker run --name eip-redis -p 6380:6379 -d --rm redis:7-alpine
+
+# 2. Push schema
+cd backend-api
+DATABASE_URL='postgresql://test:test@localhost:5433/eip_test' npx prisma db push --skip-generate
+
+# 3. Run all Ticket 15 tests
+DATABASE_URL='postgresql://test:test@localhost:5433/eip_test' REDIS_HOST=localhost REDIS_PORT=6380 \
+  npx jest --testPathPatterns='weekly-report' --no-coverage --forceExit
+
+# 4. Run only unit tests (no external deps needed)
+npx jest --testPathPatterns='weekly-report\.test' --no-coverage --forceExit
+
+# 5. Cleanup
+docker stop eip-pg eip-redis
+```
+
+### Resolved Blockers
+
+All previously identified blockers have been resolved:
+
+1. **HTML escaping** — RESOLVED: `escapeHtml()` added to `email.service.ts`, applied to all dynamic values in HTML template. 16 tests verify correctness including XSS payloads.
+2. **Timezone-aware boundaries** — RESOLVED: `computeWeekBounds()` rewritten to compute Monday 00:00 in the configured IANA timezone, then convert to UTC. Verified with exact IST boundary test case. 6 timezone-specific tests added.
+3. **TypeScript build errors** — RESOLVED: dynamic `import()` replaced with `require()` in `server.ts` (CJS project). 0 TS errors, clean production build.
+4. **Regression verification** — RESOLVED: 37 previously-skipped profile tests now pass with seeded database. Integration tests scoped to test-specific records. Full suite: 832 passed, 0 failed, 0 skipped.
+
+### Remaining Limitations
+
+- **BullMQ open handles warning**: `--forceExit` needed for Jest when running Redis integration tests due to BullMQ/ioredis connection cleanup timing. Not a functional issue.
+- **No DST edge-case tests**: Asia/Kolkata does not observe DST, so the timezone offset is constant (+5:30). The `getTimezoneOffsetMinutes` implementation handles DST-observing timezones correctly in principle, but no tests exercise DST transitions (e.g., `America/New_York`). Add tests if the system is deployed with a DST-observing timezone.
+- **Custom date ranges are not weekly-aligned**: The 31-day cap on custom ranges prevents unbounded queries but does not enforce that ranges correspond to complete weeks. This is documented and intentional — custom ranges are arbitrary look-back windows.

@@ -20,6 +20,7 @@ import feedbackRoutes from './routes/feedback.routes';
 import mentorAssignmentRoutes from './routes/mentor-assignments.routes';
 import riskRoutes from './routes/risk.routes';
 import mentorAlertRoutes from './routes/mentor-alerts.routes';
+import weeklyReportRoutes from './routes/weekly-report.routes';
 
 const app = express();
 
@@ -49,14 +50,15 @@ app.use('/api/feedback', authenticateJwt, feedbackRoutes);
 app.use('/api/mentor-assignments', authenticateJwt, mentorAssignmentRoutes);
 app.use('/api/risk', authenticateJwt, riskRoutes);
 app.use('/api/mentor-alerts', authenticateJwt, mentorAlertRoutes);
+app.use('/api/weekly-reports', authenticateJwt, weeklyReportRoutes);
 
 app.use(errorHandler);
 
 if (require.main === module) {
   // Import workers to start them (only in main process, not during tests)
-  import('./jobs/email.job');
-  import('./jobs/alert.job');
-  import('./jobs/weekly-report.job');
+  require('./jobs/email.job');
+  require('./jobs/alert.job');
+  require('./jobs/weekly-report.job');
 
   const server = app.listen(config.port, () => {
     logger.info(`Server running on port ${config.port} (${config.nodeEnv})`);
