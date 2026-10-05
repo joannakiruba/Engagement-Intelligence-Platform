@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getAssessment, getResults } from "../../services/assessments.service";
+import { useAuth } from "../../context/AuthContext";
 
 export default function AssessmentDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const canManage = user && ["TRAINER", "ADMIN"].includes(user.role);
   const [assessment, setAssessment] = useState<any>(null);
   const [results, setResults] = useState<any>(null);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
@@ -34,20 +37,22 @@ export default function AssessmentDetail() {
             {new Date(assessment.assessmentDate).toLocaleDateString()}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link
-            to={`/assessments/${id}/scores`}
-            className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
-          >
-            Enter Scores
-          </Link>
-          <Link
-            to={`/assessments/${id}/bulk-upload`}
-            className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700"
-          >
-            Bulk Upload
-          </Link>
-        </div>
+        {canManage && (
+          <div className="flex gap-2">
+            <Link
+              to={`/assessments/${id}/scores`}
+              className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+            >
+              Enter Scores
+            </Link>
+            <Link
+              to={`/assessments/${id}/bulk-upload`}
+              className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700"
+            >
+              Bulk Upload
+            </Link>
+          </div>
+        )}
       </div>
 
       <h2 className="text-lg font-semibold mb-3">Structure</h2>

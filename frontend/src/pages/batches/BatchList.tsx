@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getBatches, deleteBatch } from "../../services/batches.service";
+import { useAuth } from "../../context/AuthContext";
 
 interface BatchSummary {
   id: string;
@@ -14,6 +15,8 @@ interface BatchSummary {
 }
 
 export default function BatchList() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const [batches, setBatches] = useState<BatchSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -46,12 +49,14 @@ export default function BatchList() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Batches</h1>
-        <Link
-          to="/batches/create"
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Create Batch
-        </Link>
+        {isAdmin && (
+          <Link
+            to="/batches/create"
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            Create Batch
+          </Link>
+        )}
       </div>
 
       {loading ? (
@@ -69,7 +74,7 @@ export default function BatchList() {
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">End Date</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Members</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Sessions</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Actions</th>
+                {isAdmin && <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -89,20 +94,22 @@ export default function BatchList() {
                   </td>
                   <td className="px-4 py-3 text-sm">{b.memberCount}</td>
                   <td className="px-4 py-3 text-sm">{b.sessionCount}</td>
-                  <td className="px-4 py-3 text-sm space-x-2">
-                    <Link
-                      to={`/batches/${b.id}/edit`}
-                      className="text-gray-600 hover:text-gray-900"
-                    >
-                      Edit
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(b.id)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Delete
-                    </button>
-                  </td>
+                  {isAdmin && (
+                    <td className="px-4 py-3 text-sm space-x-2">
+                      <Link
+                        to={`/batches/${b.id}/edit`}
+                        className="text-gray-600 hover:text-gray-900"
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(b.id)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

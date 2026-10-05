@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getFeedbackList, deleteFeedback, type Feedback } from '../../services/feedback.service';
+import { useAuth } from '../../context/AuthContext';
 
 export default function FeedbackList() {
+  const { user } = useAuth();
+  const isTrainer = user?.role === 'TRAINER';
   const [records, setRecords] = useState<Feedback[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -99,8 +102,12 @@ export default function FeedbackList() {
                   <td className="px-4 py-2 text-sm">{new Date(r.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-2 text-sm flex gap-2">
                     <Link to={`/feedback/${r.id}`} className="text-blue-600 hover:underline">View</Link>
-                    <Link to={`/feedback/${r.id}/edit`} className="text-gray-600 hover:underline">Edit</Link>
-                    <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:underline">Delete</button>
+                    {isTrainer && (
+                      <>
+                        <Link to={`/feedback/${r.id}/edit`} className="text-gray-600 hover:underline">Edit</Link>
+                        <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:underline">Delete</button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
