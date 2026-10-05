@@ -20,6 +20,9 @@ import ExcusedReview from "./pages/attendance/ExcusedReview";
 import FeedbackList from "./pages/feedback/FeedbackList";
 import FeedbackForm from "./pages/feedback/FeedbackForm";
 import FeedbackDetail from "./pages/feedback/FeedbackDetail";
+import EngagementDashboard from "./pages/dashboard/EngagementDashboard";
+import BatchEngagement from "./pages/dashboard/BatchEngagement";
+import StudentEngagement from "./pages/dashboard/StudentEngagement";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -38,6 +41,9 @@ function AppNav() {
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-6">
         <Link to="/" className="text-lg font-semibold text-gray-800">
           EIP
+        </Link>
+        <Link to="/dashboard" className="text-gray-600 hover:text-gray-900">
+          Dashboard
         </Link>
         <Link to="/assessments" className="text-gray-600 hover:text-gray-900">
           Assessments
@@ -90,6 +96,9 @@ function AppRoutes() {
               </RequireAuth>
             }
           />
+          <Route path="/dashboard" element={<RequireAuth><EngagementDashboard /></RequireAuth>} />
+          <Route path="/dashboard/batch/:batchId" element={<RequireAuth><BatchEngagement /></RequireAuth>} />
+          <Route path="/dashboard/student/:studentId" element={<RequireAuth><StudentEngagement /></RequireAuth>} />
           <Route path="/" element={<AssessmentList />} />
           <Route path="/assessments" element={<AssessmentList />} />
           <Route path="/assessments/create" element={<AssessmentCreate />} />
