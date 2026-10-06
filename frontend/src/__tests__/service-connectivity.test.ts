@@ -435,10 +435,45 @@ describe('Events Service → Backend Routes', () => {
     );
   });
 
-  it('registerForEvent → POST /api/events/:id/register', async () => {
-    const { registerForEvent } = await import('../services/events.service');
+  it('updateEvent → PUT /api/events/:id', async () => {
+    const { updateEvent } = await import('../services/events.service');
+    await updateEvent(UUID, { title: 'Updated Hackathon' });
+    expect(mockAxiosInstance.put).toHaveBeenCalledWith(
+      `/api/events/${UUID}`,
+      expect.objectContaining({ title: 'Updated Hackathon' }),
+    );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// EVENT REGISTRATIONS SERVICE  →  /api/event-registrations/*
+// ═══════════════════════════════════════════════════════════════
+describe('Event Registrations Service → Backend Routes', () => {
+  it('registerForEvent → POST /api/event-registrations', async () => {
+    const { registerForEvent } = await import('../services/event-registrations.service');
     await registerForEvent(UUID);
-    expect(mockAxiosInstance.post).toHaveBeenCalledWith(`/api/events/${UUID}/register`);
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+      '/api/event-registrations',
+      { eventId: UUID },
+    );
+  });
+
+  it('getMyRegistrations → GET /api/event-registrations/my', async () => {
+    const { getMyRegistrations } = await import('../services/event-registrations.service');
+    await getMyRegistrations();
+    expectGetExact('/api/event-registrations/my');
+  });
+
+  it('getAllRegistrations → GET /api/event-registrations', async () => {
+    const { getAllRegistrations } = await import('../services/event-registrations.service');
+    await getAllRegistrations();
+    expectGetExact('/api/event-registrations');
+  });
+
+  it('cancelRegistration → DELETE /api/event-registrations/:id', async () => {
+    const { cancelRegistration } = await import('../services/event-registrations.service');
+    await cancelRegistration(UUID);
+    expect(mockAxiosInstance.delete).toHaveBeenCalledWith(`/api/event-registrations/${UUID}`);
   });
 });
 
@@ -464,10 +499,19 @@ describe('Risk Service → Backend Routes', () => {
     expectGetExact(`/api/risk/student/${UUID}/history`);
   });
 
-  it('calculateStudentRisk → POST /api/risk/calculate/:studentId', async () => {
+  it('calculateStudentRisk → POST /api/risk/calculate/:studentId with batchId', async () => {
     const { calculateStudentRisk } = await import('../services/risk.service');
-    await calculateStudentRisk(UUID);
-    expect(mockAxiosInstance.post).toHaveBeenCalledWith(`/api/risk/calculate/${UUID}`);
+    await calculateStudentRisk(UUID, UUID2);
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+      `/api/risk/calculate/${UUID}`,
+      { batchId: UUID2 },
+    );
+  });
+
+  it('calculateBatchRisk → POST /api/risk/calculate/batch/:batchId', async () => {
+    const { calculateBatchRisk } = await import('../services/risk.service');
+    await calculateBatchRisk(UUID);
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(`/api/risk/calculate/batch/${UUID}`);
   });
 });
 
@@ -537,6 +581,41 @@ describe('Mentor Service → Backend Routes', () => {
       expect.objectContaining({ mentor_response: 'acted' }),
     );
   });
+
+  it('generateAlerts → POST /api/mentor-alerts/generate', async () => {
+    const { generateAlerts } = await import('../services/mentor.service');
+    await generateAlerts(UUID);
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+      '/api/mentor-alerts/generate',
+      { batchId: UUID },
+    );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// NOTIFICATIONS SERVICE  →  /api/notifications/*
+// ═══════════════════════════════════════════════════════════════
+describe('Notifications Service → Backend Routes', () => {
+  it('getNotifications → GET /api/notifications', async () => {
+    const { getNotifications } = await import('../services/notifications.service');
+    await getNotifications(1, 20);
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith(
+      '/api/notifications',
+      expect.objectContaining({ params: { page: 1, limit: 20 } }),
+    );
+  });
+
+  it('markAsRead → PATCH /api/notifications/:id/read', async () => {
+    const { markAsRead } = await import('../services/notifications.service');
+    await markAsRead(UUID);
+    expect(mockAxiosInstance.patch).toHaveBeenCalledWith(`/api/notifications/${UUID}/read`);
+  });
+
+  it('markAllAsRead → POST /api/notifications/mark-all-read', async () => {
+    const { markAllAsRead } = await import('../services/notifications.service');
+    await markAllAsRead();
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith('/api/notifications/mark-all-read');
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -563,10 +642,10 @@ describe('Tasks Service → Backend Routes', () => {
 
   it('createTask → POST /api/tasks', async () => {
     const { createTask } = await import('../services/tasks.service');
-    await createTask({ title: 'Read chapter 5', isMandatory: true });
+    await createTask({ title: 'Read chapter 5', isMandatory: true, batchIds: [UUID] });
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
       '/api/tasks',
-      expect.objectContaining({ title: 'Read chapter 5' }),
+      expect.objectContaining({ title: 'Read chapter 5', batchIds: [UUID] }),
     );
   });
 
@@ -585,22 +664,49 @@ describe('Tasks Service → Backend Routes', () => {
     expect(mockAxiosInstance.delete).toHaveBeenCalledWith(`/api/tasks/${UUID}`);
   });
 
-  it('updateTaskProgress → POST /api/tasks/:id/progress', async () => {
+  it('updateTaskProgress → PATCH /api/tasks/:id/progress', async () => {
     const { updateTaskProgress } = await import('../services/tasks.service');
     await updateTaskProgress(UUID, { progress: 'COMPLETED' });
-    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+    expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
       `/api/tasks/${UUID}/progress`,
       expect.objectContaining({ progress: 'COMPLETED' }),
     );
   });
 
-  it('setTaskMarks → POST /api/tasks/:id/marks', async () => {
+  it('setTaskMarks → PUT /api/tasks/:id/marks', async () => {
     const { setTaskMarks } = await import('../services/tasks.service');
     await setTaskMarks(UUID, UUID2, 85);
-    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+    expect(mockAxiosInstance.put).toHaveBeenCalledWith(
       `/api/tasks/${UUID}/marks`,
       { studentId: UUID2, marksAwarded: 85 },
     );
+  });
+
+  it('changeDeadline → PATCH /api/tasks/:id/deadline', async () => {
+    const { changeDeadline } = await import('../services/tasks.service');
+    await changeDeadline(UUID, { deadlineType: 'FIXED', deadline: '2026-12-01T00:00:00Z' });
+    expect(mockAxiosInstance.patch).toHaveBeenCalledWith(
+      `/api/tasks/${UUID}/deadline`,
+      expect.objectContaining({ deadlineType: 'FIXED' }),
+    );
+  });
+
+  it('closeTask → POST /api/tasks/:id/close', async () => {
+    const { closeTask } = await import('../services/tasks.service');
+    await closeTask(UUID);
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(`/api/tasks/${UUID}/close`);
+  });
+
+  it('reopenTask → POST /api/tasks/:id/reopen', async () => {
+    const { reopenTask } = await import('../services/tasks.service');
+    await reopenTask(UUID);
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(`/api/tasks/${UUID}/reopen`);
+  });
+
+  it('toggleInterested → POST /api/tasks/:id/interested', async () => {
+    const { toggleInterested } = await import('../services/tasks.service');
+    await toggleInterested(UUID);
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(`/api/tasks/${UUID}/interested`);
   });
 });
 
@@ -620,12 +726,29 @@ describe('Proofs Service → Backend Routes', () => {
     expectGetExact('/api/proofs/my');
   });
 
-  it('submitProof → POST /api/proofs', async () => {
+  it('submitProof → POST /api/proofs (FormData)', async () => {
     const { submitProof } = await import('../services/proofs.service');
-    await submitProof({ eventId: UUID, fileName: 'cert.pdf' });
+    const file = new File(['test'], 'cert.pdf', { type: 'application/pdf' });
+    await submitProof(UUID, file);
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
       '/api/proofs',
-      expect.objectContaining({ eventId: UUID }),
+      expect.any(FormData),
+    );
+  });
+
+  it('getProofDetail → GET /api/proofs/:id', async () => {
+    const { getProofDetail } = await import('../services/proofs.service');
+    await getProofDetail(UUID);
+    expectGetExact(`/api/proofs/${UUID}`);
+  });
+
+  it('replaceProofFile → PUT /api/proofs/:id/file (FormData)', async () => {
+    const { replaceProofFile } = await import('../services/proofs.service');
+    const file = new File(['test'], 'cert2.pdf', { type: 'application/pdf' });
+    await replaceProofFile(UUID, file);
+    expect(mockAxiosInstance.put).toHaveBeenCalledWith(
+      `/api/proofs/${UUID}/file`,
+      expect.any(FormData),
     );
   });
 

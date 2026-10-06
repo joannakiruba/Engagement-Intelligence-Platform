@@ -39,10 +39,11 @@ export const RiskOverviewPage: React.FC = () => {
     loadData();
   }, []);
 
-  const handleRecalculate = async (studentId: string) => {
+  const handleRecalculate = async (studentId: string, batchId?: string) => {
+    if (!batchId) return;
     try {
       setCalculatingId(studentId);
-      await calculateStudentRisk(studentId);
+      await calculateStudentRisk(studentId, batchId);
       await loadData();
     } catch (err) {
       console.error(err);
@@ -174,7 +175,7 @@ export const RiskOverviewPage: React.FC = () => {
 
                 <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end">
                   <button
-                    onClick={() => handleRecalculate(r.studentId)}
+                    onClick={() => handleRecalculate(r.studentId, r.factors?.scope?.batchId)}
                     disabled={calculatingId === r.studentId}
                     className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 flex items-center gap-1.5 transition-colors"
                   >

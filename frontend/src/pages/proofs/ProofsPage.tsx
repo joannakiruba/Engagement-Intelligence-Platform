@@ -26,8 +26,7 @@ export const ProofsPage: React.FC = () => {
 
   // Student upload form
   const [selectedEventId, setSelectedEventId] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [fileUrl, setFileUrl] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [submittingProof, setSubmittingProof] = useState(false);
 
   // Review state
@@ -64,16 +63,13 @@ export const ProofsPage: React.FC = () => {
 
   const handleSubmitProof = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEventId || !fileName.trim()) return;
+    if (!selectedEventId || !selectedFile) return;
     try {
       setSubmittingProof(true);
-      await submitProof({
-        eventId: selectedEventId,
-        fileName: fileName.trim(),
-        fileUrl: fileUrl.trim() || 'https://drive.google.com/file/d/sample-cert/view',
-      });
-      setFileName('');
-      setFileUrl('');
+      await submitProof(selectedEventId, selectedFile);
+      setSelectedFile(null);
+      const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+      if (fileInput) fileInput.value = '';
       await loadData();
     } catch (err) {
       console.error(err);
@@ -148,25 +144,13 @@ export const ProofsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Document / Certificate Name *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Upload File *</label>
                 <input
-                  type="text"
-                  value={fileName}
-                  onChange={(e) => setFileName(e.target.value)}
-                  placeholder="e.g. Hackathon_Acceptance_Letter.pdf"
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.gif,.pdf"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                   className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50 text-xs"
                   required
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">File URL / Google Drive Link</label>
-                <input
-                  type="url"
-                  value={fileUrl}
-                  onChange={(e) => setFileUrl(e.target.value)}
-                  placeholder="https://drive.google.com/file/d/..."
-                  className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50 text-xs"
                 />
                 <span className="text-[10px] text-slate-400 mt-0.5 block">
                   Accepted formats: PNG, JPEG, GIF, PDF (Max 10MB)

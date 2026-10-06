@@ -1,4 +1,3 @@
-// src/services/events.service.ts
 import api from './api';
 import { EventItem } from '../types';
 
@@ -23,7 +22,13 @@ export async function createEvent(payload: {
   return res.data.data;
 }
 
-export async function registerForEvent(id: string): Promise<any> {
-  const res = await api.post(`/api/events/${id}/register`);
+export async function updateEvent(id: string, payload: {
+  title?: string;
+  description?: string;
+  eventType?: EventItem['eventType'];
+  eventDate?: string;
+  registrationDeadline?: string | null;
+}): Promise<EventItem> {
+  const res = await api.put(`/api/events/${id}`, payload);
   return res.data.data;
 }

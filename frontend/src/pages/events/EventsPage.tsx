@@ -1,7 +1,8 @@
 // src/pages/events/EventsPage.tsx
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { getEvents, createEvent, registerForEvent } from '../../services/events.service';
+import { getEvents, createEvent } from '../../services/events.service';
+import { registerForEvent } from '../../services/event-registrations.service';
 import { EventItem } from '../../types';
 import { LoadingState } from '../../components/common/LoadingState';
 import { ErrorState } from '../../components/common/ErrorState';

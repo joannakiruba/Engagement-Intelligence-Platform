@@ -39,9 +39,15 @@ export async function updateAlertStatus(alertId: number, status: 'pending' | 'se
 export async function recordAlertOutcome(alertId: number, data: {
   mentor_response: 'acted' | 'dismissed' | 'ignored';
   response_time_hours?: number;
+  intervention_id?: string;
   was_recommendation_followed: boolean;
   outcome_notes?: string;
 }): Promise<MentorAlert> {
   const res = await api.post(`/api/mentor-alerts/${alertId}/outcome`, data);
+  return res.data.data;
+}
+
+export async function generateAlerts(batchId?: string): Promise<any> {
+  const res = await api.post('/api/mentor-alerts/generate', batchId ? { batchId } : {});
   return res.data.data;
 }

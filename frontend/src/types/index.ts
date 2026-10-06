@@ -145,6 +145,7 @@ export interface RiskScore {
     negativeFeedbackCount: number;
     decliningTrend?: boolean;
     mlSuggestedEscalation?: boolean;
+    scope?: { batchId: string };
   };
   generatedAt: string;
   student?: User;
@@ -198,7 +199,7 @@ export interface Task {
   isMandatory: boolean;
   isInternal: boolean;
   maxMarks?: number;
-  deadlineType: 'HARD' | 'SOFT' | 'NONE';
+  deadlineType: 'FIXED' | 'TENTATIVE' | 'TBD' | 'NONE';
   deadline?: string;
   deadlineNote?: string;
   closedAt?: string;
@@ -214,7 +215,7 @@ export interface TaskSubmission {
   id: string;
   taskId: string;
   studentId: string;
-  progress: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+  progress: 'NOT_STARTED' | 'IN_PROGRESS' | 'ALMOST_COMPLETED' | 'COMPLETED';
   isInterested: boolean;
   completedAt?: string;
   isLate?: boolean;
@@ -250,6 +251,25 @@ export interface ProofSubmission {
   createdAt: string;
   student?: User;
   event?: EventItem;
+}
+
+export interface EventRegistration {
+  id: string;
+  eventId: string;
+  studentId: string;
+  registeredAt: string;
+  event?: { id: string; title: string; eventType: string; eventDate: string };
+  student?: { id: string; name: string; email: string };
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  title?: string;
+  message: string;
+  type?: string;
+  isRead: boolean;
+  createdAt: string;
 }
 
 export interface LeaderboardRankItem {

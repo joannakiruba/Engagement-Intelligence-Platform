@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { getTask, updateTaskProgress, setTaskMarks } from '../../services/tasks.service';
+import { getTask, updateTaskProgress, setTaskMarks, toggleInterested } from '../../services/tasks.service';
 import { Task, TaskSubmission } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { LoadingState } from '../../components/common/LoadingState';
@@ -25,7 +25,7 @@ export const TaskDetailPage: React.FC = () => {
   const [task, setTask] = useState<Task | null>(null);
 
   // Student progress form
-  const [myProgress, setMyProgress] = useState<'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'>('IN_PROGRESS');
+  const [myProgress, setMyProgress] = useState<'NOT_STARTED' | 'IN_PROGRESS' | 'ALMOST_COMPLETED' | 'COMPLETED'>('IN_PROGRESS');
   const [isInterested, setIsInterested] = useState(true);
   const [notes, setNotes] = useState('');
   const [submittingProgress, setSubmittingProgress] = useState(false);
@@ -72,8 +72,6 @@ export const TaskDetailPage: React.FC = () => {
       setSubmittingProgress(true);
       await updateTaskProgress(id, {
         progress: myProgress,
-        isInterested,
-        studentNotes: notes,
       });
       await loadData();
     } catch (err) {
