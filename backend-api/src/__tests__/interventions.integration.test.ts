@@ -33,12 +33,14 @@ jest.mock('../lib/prisma', () => {
       update: jest.fn(),
     },
     interventionOutcome: {
+      findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
     mentorAssignment: { findUnique: jest.fn() },
     riskScore: { findFirst: jest.fn() },
     notification: { create: jest.fn() },
+    auditLog: { create: jest.fn() },
     $queryRawUnsafe: jest.fn(),
     $transaction: jest.fn(),
   };
@@ -106,6 +108,11 @@ function setupRolePermissions() {
 beforeEach(() => {
   jest.clearAllMocks();
   setupRolePermissions();
+  // Restore default $transaction — clearAllMocks doesn't reset mockImplementation
+  (prisma.$transaction as jest.Mock).mockImplementation(async (fn: any) => {
+    if (typeof fn === 'function') return fn(prisma);
+    return Promise.all(fn);
+  });
 });
 
 // ── Finding 1: Read-access scope resolution ──
@@ -333,6 +340,7 @@ describe('Finding 6: Terminal state enforcement', () => {
               id: 'int-1',
               status: 'COMPLETED',
               mentorId: 'mentor-1',
+              alertId: null,
             }),
           },
         };
@@ -486,7 +494,9 @@ describe('Duplicate intervention creation', () => {
 describe('Intervention completion with alert lifecycle', () => {
   const mentorToken = makeToken('mentor-1', ROLE_IDS.MENTOR);
 
-  it('should complete intervention and record alert outcome', async () => {
+  it('should complete intervention and record alert outcome atomically', async () => {
+    const alertCreatedAt = new Date('2026-10-01T10:00:00Z');
+    const alertActedAt = new Date('2026-10-01T12:30:00Z');
     const completedIntervention = {
       id: 'int-1',
       studentId: 'student-1',
@@ -504,24 +514,29 @@ describe('Intervention completion with alert lifecycle', () => {
       riskScore: null,
     };
 
+    const txQueryRawMock = jest.fn().mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT created_at')) return [{ created_at: alertCreatedAt, acted_at: alertActedAt }];
+      return [];
+    });
+
     (prisma.$transaction as jest.Mock).mockImplementation(async (fn: any) => {
       if (typeof fn === 'function') {
         const mockTx: any = {
           intervention: {
             findUnique: jest.fn()
-              .mockResolvedValueOnce({ id: 'int-1', status: 'IN_PROGRESS', mentorId: 'mentor-1' })
+              .mockResolvedValueOnce({ id: 'int-1', status: 'IN_PROGRESS', mentorId: 'mentor-1', alertId: 5 })
               .mockResolvedValueOnce(completedIntervention),
             update: jest.fn().mockResolvedValue(completedIntervention),
           },
           interventionOutcome: {
             create: jest.fn().mockResolvedValue({ id: 'oc-1' }),
           },
+          $queryRawUnsafe: txQueryRawMock,
+          auditLog: { create: jest.fn() },
         };
         return fn(mockTx);
       }
     });
-    // Mock the alert outcome queries (check + insert)
-    (prisma.$queryRawUnsafe as jest.Mock).mockResolvedValue([]);
 
     const res = await request(app)
       .post('/api/interventions/int-1/complete')
@@ -530,8 +545,15 @@ describe('Intervention completion with alert lifecycle', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('COMPLETED');
-    // Verify alert outcome was attempted
-    expect(prisma.$queryRawUnsafe).toHaveBeenCalled();
+    // Verify alert outcome INSERT was called inside the transaction
+    const insertCall = txQueryRawMock.mock.calls.find((c: any[]) => c[0].includes('INSERT INTO ml_alert_outcomes'));
+    expect(insertCall).toBeDefined();
+    // was_recommendation_followed should be NULL, not true/false
+    expect(insertCall[0]).toContain('NULL');
+    // response_time_hours should be acted_at - created_at = 2.5 hours
+    expect(insertCall[3]).toBeCloseTo(2.5);
+    // ON CONFLICT prevents duplicates
+    expect(insertCall[0]).toContain('ON CONFLICT');
   });
 
   it('should complete intervention without alertId gracefully', async () => {
@@ -557,13 +579,15 @@ describe('Intervention completion with alert lifecycle', () => {
         const mockTx: any = {
           intervention: {
             findUnique: jest.fn()
-              .mockResolvedValueOnce({ id: 'int-2', status: 'PENDING', mentorId: 'mentor-1' })
+              .mockResolvedValueOnce({ id: 'int-2', status: 'PENDING', mentorId: 'mentor-1', alertId: null })
               .mockResolvedValueOnce(completedIntervention),
             update: jest.fn().mockResolvedValue(completedIntervention),
           },
           interventionOutcome: {
             create: jest.fn().mockResolvedValue({ id: 'oc-2' }),
           },
+          $queryRawUnsafe: jest.fn(),
+          auditLog: { create: jest.fn() },
         };
         return fn(mockTx);
       }

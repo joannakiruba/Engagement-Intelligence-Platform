@@ -1,6 +1,9 @@
 import prisma from '../lib/prisma';
 import { Prisma, InterventionStatus } from '@prisma/client';
 import type { CauseCode } from '../validators/interventions.validator';
+import { logger } from '../utils/logger';
+
+const DbNull = Prisma.DbNull;
 
 const interventionInclude = {
   student: { select: { id: true, name: true, email: true } },
@@ -34,6 +37,7 @@ export async function createIntervention(data: {
   description: string;
   deadline?: Date;
   riskScoreId?: string;
+  ipAddress?: string;
 }) {
   const existing = await findActiveIntervention(data.studentId, data.causeCode);
   if (existing) {
@@ -41,19 +45,39 @@ export async function createIntervention(data: {
   }
 
   try {
-    const intervention = await prisma.intervention.create({
-      data: {
-        studentId: data.studentId,
-        mentorId: data.mentorId,
-        alertId: data.alertId,
-        causeCode: data.causeCode,
-        title: data.title,
-        description: data.description || '',
-        deadline: data.deadline,
-        riskScoreId: data.riskScoreId,
-        status: 'PENDING',
-      },
-      include: interventionInclude,
+    const intervention = await prisma.$transaction(async (tx) => {
+      const created = await tx.intervention.create({
+        data: {
+          studentId: data.studentId,
+          mentorId: data.mentorId,
+          alertId: data.alertId,
+          causeCode: data.causeCode,
+          title: data.title,
+          description: data.description || '',
+          deadline: data.deadline,
+          riskScoreId: data.riskScoreId,
+          status: 'PENDING',
+        },
+        include: interventionInclude,
+      });
+
+      await tx.$queryRawUnsafe(
+        `UPDATE ml_mentor_alerts SET alert_status = 'acted', acted_at = NOW() WHERE id = $1 AND alert_status != 'acted'`,
+        data.alertId,
+      );
+
+      await tx.auditLog.create({
+        data: {
+          userId: data.mentorId,
+          entityType: 'Intervention',
+          entityId: created.id,
+          action: 'INTERVENTION_CREATED',
+          newValues: { alertId: data.alertId, causeCode: data.causeCode, title: data.title, studentId: data.studentId },
+          ipAddress: data.ipAddress || null,
+        },
+      });
+
+      return created;
     });
     return { existing: false, intervention };
   } catch (err: any) {
@@ -132,11 +156,12 @@ export async function updateIntervention(
     deadline?: Date | null;
     status?: 'IN_PROGRESS' | 'CANCELLED';
   },
+  ipAddress?: string,
 ) {
   return prisma.$transaction(async (tx) => {
     const intervention = await tx.intervention.findUnique({
       where: { id },
-      select: { status: true, mentorId: true },
+      select: { status: true, mentorId: true, title: true, description: true, deadline: true },
     });
     if (!intervention) return null;
     if (intervention.mentorId !== mentorId) return null;
@@ -150,11 +175,25 @@ export async function updateIntervention(
     if (data.deadline !== undefined) updateData.deadline = data.deadline;
     if (data.status) updateData.status = data.status;
 
-    return tx.intervention.update({
+    const updated = await tx.intervention.update({
       where: { id },
       data: updateData,
       include: interventionInclude,
     });
+
+    await tx.auditLog.create({
+      data: {
+        userId: mentorId,
+        entityType: 'Intervention',
+        entityId: id,
+        action: 'INTERVENTION_UPDATED',
+        oldValues: { title: intervention.title, description: intervention.description, deadline: intervention.deadline, status: intervention.status },
+        newValues: data,
+        ipAddress: ipAddress || null,
+      },
+    });
+
+    return updated;
   });
 }
 
@@ -170,13 +209,14 @@ export async function completeIntervention(
   mentorId: string,
   outcome: 'IMPROVED' | 'NO_CHANGE' | 'DECLINED',
   remarks?: string,
+  ipAddress?: string,
 ) {
   return prisma.$transaction(async (tx) => {
     const now = new Date();
 
     const intervention = await tx.intervention.findUnique({
       where: { id: interventionId },
-      select: { status: true, mentorId: true },
+      select: { status: true, mentorId: true, alertId: true },
     });
     if (!intervention) return null;
     if (intervention.mentorId !== mentorId) return null;
@@ -201,6 +241,41 @@ export async function completeIntervention(
       },
     });
 
+    if (intervention.alertId) {
+      try {
+        const alertRows = await tx.$queryRawUnsafe<Array<{ created_at: Date; acted_at: Date | null }>>(
+          `SELECT created_at, acted_at FROM ml_mentor_alerts WHERE id = $1`,
+          intervention.alertId,
+        );
+        const responseTimeHours = alertRows.length && alertRows[0].acted_at
+          ? (new Date(alertRows[0].acted_at).getTime() - new Date(alertRows[0].created_at).getTime()) / 3_600_000
+          : null;
+
+        await tx.$queryRawUnsafe(
+          `INSERT INTO ml_alert_outcomes (alert_id, mentor_response, intervention_id, was_recommendation_followed, response_time_hours, outcome_notes)
+           VALUES ($1, 'acted', $2, NULL, $3, $4)
+           ON CONFLICT (alert_id, intervention_id) WHERE intervention_id IS NOT NULL DO NOTHING`,
+          intervention.alertId,
+          interventionId,
+          responseTimeHours,
+          remarks || null,
+        );
+      } catch (err) {
+        logger.error(`Failed to record alert outcome for alertId=${intervention.alertId}: ${err}`);
+      }
+    }
+
+    await tx.auditLog.create({
+      data: {
+        userId: mentorId,
+        entityType: 'Intervention',
+        entityId: interventionId,
+        action: 'INTERVENTION_COMPLETED',
+        newValues: { outcome, remarks: remarks || null },
+        ipAddress: ipAddress || null,
+      },
+    });
+
     return tx.intervention.findUnique({
       where: { id: interventionId },
       include: interventionInclude,
@@ -212,13 +287,45 @@ export async function editOutcome(
   interventionId: string,
   outcome: 'IMPROVED' | 'NO_CHANGE' | 'DECLINED',
   remarks?: string,
+  opts?: { alertId?: number | null; mentorId?: string; ipAddress?: string },
 ) {
-  return prisma.interventionOutcome.update({
-    where: { interventionId },
-    data: {
-      outcome,
-      remarks: remarks || null,
-    },
+  return prisma.$transaction(async (tx) => {
+    const oldOutcome = await tx.interventionOutcome.findUnique({
+      where: { interventionId },
+    });
+
+    const updated = await tx.interventionOutcome.update({
+      where: { interventionId },
+      data: {
+        outcome,
+        remarks: remarks || null,
+      },
+    });
+
+    if (opts?.alertId) {
+      await tx.$queryRawUnsafe(
+        `UPDATE ml_alert_outcomes SET outcome_notes = $1 WHERE alert_id = $2 AND intervention_id = $3`,
+        remarks || null,
+        opts.alertId,
+        interventionId,
+      );
+    }
+
+    if (opts?.mentorId) {
+      await tx.auditLog.create({
+        data: {
+          userId: opts.mentorId,
+          entityType: 'InterventionOutcome',
+          entityId: interventionId,
+          action: 'INTERVENTION_OUTCOME_EDITED',
+          oldValues: oldOutcome ? { outcome: oldOutcome.outcome, remarks: oldOutcome.remarks } : DbNull,
+          newValues: { outcome, remarks: remarks || null },
+          ipAddress: opts.ipAddress || null,
+        },
+      });
+    }
+
+    return updated;
   });
 }
 
