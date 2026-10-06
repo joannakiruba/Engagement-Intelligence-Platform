@@ -482,7 +482,8 @@ describe('RBAC Scope Assignment', () => {
     expect(facultyPerms).toContain('interventions:read:any');
     const writePerms = facultyPerms.filter(
       (p) => (p.includes(':create') || p.includes(':update') || p.includes(':mark') || p.includes(':approve'))
-        && p !== 'users:update:self',
+        && p !== 'users:update:self'
+        && p !== 'notifications:update:own',
     );
     expect(writePerms).toHaveLength(0);
   });
@@ -718,9 +719,9 @@ describe('Seed Configuration', () => {
     expect(ROLES).toContain('ADMIN');
   });
 
-  test('67 unique permission codes', () => {
+  test('unique permission codes count', () => {
     const uniqueCodes = new Set(PERMISSIONS.map((p) => p.code));
-    expect(uniqueCodes.size).toBe(69);
+    expect(uniqueCodes.size).toBe(82);
   });
 
   test('no duplicate permission codes', () => {

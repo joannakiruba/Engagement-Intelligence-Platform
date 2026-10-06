@@ -23,6 +23,9 @@ import taskRoutes from './routes/tasks.routes';
 import proofRoutes from './routes/proofs.routes';
 import eventRoutes from './routes/events.routes';
 import engagementRoutes from './routes/engagement.routes';
+import leaderboardRoutes from './routes/leaderboard.routes';
+import interventionRoutes from './routes/interventions.routes';
+import notificationRoutes from './routes/notifications.routes';
 
 const app = express();
 
@@ -56,6 +59,9 @@ app.use('/api/tasks', authenticateJwt, taskRoutes);
 app.use('/api/events', authenticateJwt, eventRoutes);
 app.use('/api/proofs', authenticateJwt, proofRoutes);
 app.use('/api/engagement', authenticateJwt, engagementRoutes);
+app.use('/api/leaderboard', authenticateJwt, leaderboardRoutes);
+app.use('/api/interventions', authenticateJwt, interventionRoutes);
+app.use('/api/notifications', authenticateJwt, notificationRoutes);
 
 app.use(errorHandler);
 
@@ -69,6 +75,7 @@ if (require.main === module) {
     import('./jobs/email.job.js'),
     import('./jobs/alert.job.js'),
     import('./jobs/weekly-report.job.js'),
+    import('./jobs/overdue-check.job.js').then((m) => m.startOverdueSchedule()),
   ])
     .then(() => logger.info('BullMQ workers initialized'))
     .catch((err) => logger.warn('BullMQ workers failed to start (Redis may be unavailable)', { error: (err as Error).message }));
