@@ -20,6 +20,8 @@ import {
   ShieldAlert,
   UserCircle,
   X,
+  Ticket,
+  Inbox,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -135,6 +137,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           icon: <FileCheck2 className="w-4 h-4" />,
           requiredAny: ['proofs:submit:self', 'proofs:read:batch', 'proofs:read:any', 'proofs:approve:any'],
         },
+        {
+          label: 'My Registrations',
+          to: '/my-registrations',
+          icon: <Ticket className="w-4 h-4" />,
+          requiredAny: ['event_registrations:create:self', 'event_registrations:read:own'],
+        },
       ],
     },
     {
@@ -151,6 +159,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           to: '/admin/users',
           icon: <ShieldAlert className="w-4 h-4" />,
           requiredAny: ['users:create', 'users:change_role', 'users:activate'],
+        },
+        {
+          label: 'Notifications',
+          to: '/notifications',
+          icon: <Inbox className="w-4 h-4" />,
+          requiredAny: ['notifications:read:own'],
         },
         {
           label: 'My Profile',

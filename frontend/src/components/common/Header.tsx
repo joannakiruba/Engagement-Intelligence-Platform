@@ -1,9 +1,10 @@
 // src/components/common/Header.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from './StatusBadge';
 import { RoleName } from '../../types';
+import { getNotifications } from '../../services/notifications.service';
 import {
   Menu,
   User as UserIcon,
@@ -11,6 +12,7 @@ import {
   ChevronDown,
   ShieldCheck,
   Check,
+  Bell,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -31,6 +33,20 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    getNotifications(1, 1)
+      .then((res) => setUnreadCount(res.unreadCount))
+      .catch(() => {});
+    const interval = setInterval(() => {
+      getNotifications(1, 1)
+        .then((res) => setUnreadCount(res.unreadCount))
+        .catch(() => {});
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   const handleLogout = async () => {
     await logout();
@@ -71,6 +87,20 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
 
         {user && (
           <div className="flex items-center gap-2 sm:gap-4">
+            {/* Notification Bell */}
+            <Link
+              to="/notifications"
+              className="relative p-2 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+              title="Notifications"
+            >
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 ring-2 ring-white">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </Link>
+
             {/* Persona Fast-Switcher (Essential for testing all 6 role-based flows) */}
             <div className="relative">
               <button

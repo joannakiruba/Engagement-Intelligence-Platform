@@ -55,6 +55,10 @@ import { TaskDetailPage } from './pages/tasks/TaskDetailPage';
 import { EventsPage } from './pages/events/EventsPage';
 import { ProofsPage } from './pages/proofs/ProofsPage';
 
+// Notifications & Registrations
+import { NotificationsPage } from './pages/notifications/NotificationsPage';
+import { MyRegistrationsPage } from './pages/registrations/MyRegistrationsPage';
+
 // Admin & Mentor
 import { MentorAssignmentsPage } from './pages/mentor/MentorAssignmentsPage';
 import { UserManagementPage } from './pages/admin/UserManagementPage';
@@ -414,6 +418,26 @@ export default function App() {
               element={
                 <ProtectedRoute requiredAnyPermissions={['proofs:submit:self', 'proofs:read:batch', 'proofs:read:any', 'proofs:approve:any']}>
                   <ProofsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Notifications */}
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute requiredAnyPermissions={['notifications:read:own']}>
+                  <NotificationsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* My Registrations (Student) */}
+            <Route
+              path="/my-registrations"
+              element={
+                <ProtectedRoute requiredAnyPermissions={['event_registrations:create:self', 'event_registrations:read:own']}>
+                  <MyRegistrationsPage />
                 </ProtectedRoute>
               }
             />

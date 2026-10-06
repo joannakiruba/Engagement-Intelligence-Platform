@@ -32,7 +32,7 @@ export const TaskListPage: React.FC = () => {
   const [description, setDescription] = useState('');
   const [maxMarks, setMaxMarks] = useState<number>(50);
   const [deadline, setDeadline] = useState('');
-  const [deadlineType, setDeadlineType] = useState<'HARD' | 'SOFT' | 'NONE'>('HARD');
+  const [deadlineType, setDeadlineType] = useState<'FIXED' | 'TENTATIVE' | 'TBD' | 'NONE'>('FIXED');
   const [isMandatory, setIsMandatory] = useState(true);
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -292,8 +292,9 @@ export const TaskListPage: React.FC = () => {
                 onChange={(e: any) => setDeadlineType(e.target.value)}
                 className="w-full p-2.5 border border-slate-200 rounded-lg bg-slate-50 text-xs"
               >
-                <option value="HARD">HARD (Strict enforcement)</option>
-                <option value="SOFT">SOFT (Late permitted)</option>
+                <option value="FIXED">FIXED (Strict enforcement)</option>
+                <option value="TENTATIVE">TENTATIVE (Flexible)</option>
+                <option value="TBD">TBD (To be decided)</option>
                 <option value="NONE">NONE</option>
               </select>
             </div>
