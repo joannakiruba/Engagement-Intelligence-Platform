@@ -23,6 +23,7 @@ import taskRoutes from './routes/tasks.routes';
 import proofRoutes from './routes/proofs.routes';
 import eventRoutes from './routes/events.routes';
 import engagementRoutes from './routes/engagement.routes';
+import leaderboardRoutes from './routes/leaderboard.routes';
 
 const app = express();
 
@@ -56,6 +57,7 @@ app.use('/api/tasks', authenticateJwt, taskRoutes);
 app.use('/api/events', authenticateJwt, eventRoutes);
 app.use('/api/proofs', authenticateJwt, proofRoutes);
 app.use('/api/engagement', authenticateJwt, engagementRoutes);
+app.use('/api/leaderboard', authenticateJwt, leaderboardRoutes);
 
 app.use(errorHandler);
 
