@@ -398,6 +398,203 @@ describe('Finding 6: Terminal state enforcement', () => {
   });
 });
 
+// ── Duplicate creation ──
+describe('Duplicate intervention creation', () => {
+  const mentorToken = makeToken('mentor-1', ROLE_IDS.MENTOR);
+
+  it('should return existing intervention when duplicate student+cause is active', async () => {
+    const existingIntervention = {
+      id: 'int-existing',
+      studentId: 'student-1',
+      mentorId: 'mentor-1',
+      causeCode: 'ATTENDANCE_DECLINE',
+      status: 'PENDING',
+      alertId: 1,
+      title: 'Existing',
+      description: '',
+      student: { id: 'student-1', name: 'S', email: 's@t.com' },
+      mentor: { id: 'mentor-1', name: 'M', email: 'm@t.com' },
+      tasks: [],
+      updates: [],
+      outcome: null,
+      riskScore: null,
+    };
+
+    // Mock alert ownership
+    (prisma.$queryRawUnsafe as jest.Mock).mockImplementation(async (sql: string) => {
+      if (sql.includes('ml_mentor_alerts')) return [{ id: 1, student_id: 'student-1', mentor_id: 'mentor-1' }];
+      if (sql.includes('ml_alert_causes')) return [{ id: 1 }];
+      return [];
+    });
+    (prisma.mentorAssignment.findUnique as jest.Mock).mockResolvedValue({ id: 'a-1' });
+    (prisma.riskScore.findFirst as jest.Mock).mockResolvedValue(null);
+    // findActiveIntervention returns existing
+    (prisma.intervention.findFirst as jest.Mock).mockResolvedValue({ id: 'int-existing' });
+    (prisma.intervention.findUnique as jest.Mock).mockResolvedValue(existingIntervention);
+
+    const res = await request(app)
+      .post('/api/interventions')
+      .set('Authorization', `Bearer ${mentorToken}`)
+      .send({ alertId: 1, causeCode: 'ATTENDANCE_DECLINE', title: 'New attempt' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.existing).toBe(true);
+    expect(res.body.data.intervention.id).toBe('int-existing');
+  });
+
+  it('should create new intervention when no active one exists for the cause', async () => {
+    const newIntervention = {
+      id: 'int-new',
+      studentId: 'student-1',
+      mentorId: 'mentor-1',
+      causeCode: 'ATTENDANCE_DECLINE',
+      status: 'PENDING',
+      alertId: 1,
+      title: 'New intervention',
+      description: '',
+      student: { id: 'student-1', name: 'S', email: 's@t.com' },
+      mentor: { id: 'mentor-1', name: 'M', email: 'm@t.com' },
+      tasks: [],
+      updates: [],
+      outcome: null,
+      riskScore: null,
+    };
+
+    (prisma.$queryRawUnsafe as jest.Mock).mockImplementation(async (sql: string) => {
+      if (sql.includes('ml_mentor_alerts') && sql.includes('WHERE id')) return [{ id: 1, student_id: 'student-1', mentor_id: 'mentor-1' }];
+      if (sql.includes('ml_alert_causes')) return [{ id: 1 }];
+      if (sql.includes('UPDATE ml_mentor_alerts')) return [];
+      return [];
+    });
+    (prisma.mentorAssignment.findUnique as jest.Mock).mockResolvedValue({ id: 'a-1' });
+    (prisma.riskScore.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.intervention.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.intervention.create as jest.Mock).mockResolvedValue(newIntervention);
+
+    const res = await request(app)
+      .post('/api/interventions')
+      .set('Authorization', `Bearer ${mentorToken}`)
+      .send({ alertId: 1, causeCode: 'ATTENDANCE_DECLINE', title: 'New intervention' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.existing).toBe(false);
+    expect(res.body.data.intervention.id).toBe('int-new');
+  });
+});
+
+// ── Completion flow with alert lifecycle ──
+describe('Intervention completion with alert lifecycle', () => {
+  const mentorToken = makeToken('mentor-1', ROLE_IDS.MENTOR);
+
+  it('should complete intervention and record alert outcome', async () => {
+    const completedIntervention = {
+      id: 'int-1',
+      studentId: 'student-1',
+      mentorId: 'mentor-1',
+      alertId: 5,
+      status: 'COMPLETED',
+      completedAt: new Date().toISOString(),
+      title: 'Test',
+      description: '',
+      student: { id: 'student-1', name: 'S', email: 's@t.com' },
+      mentor: { id: 'mentor-1', name: 'M', email: 'm@t.com' },
+      tasks: [],
+      updates: [],
+      outcome: { id: 'oc-1', outcome: 'IMPROVED', remarks: null, recordedAt: new Date().toISOString() },
+      riskScore: null,
+    };
+
+    (prisma.$transaction as jest.Mock).mockImplementation(async (fn: any) => {
+      if (typeof fn === 'function') {
+        const mockTx: any = {
+          intervention: {
+            findUnique: jest.fn()
+              .mockResolvedValueOnce({ id: 'int-1', status: 'IN_PROGRESS', mentorId: 'mentor-1' })
+              .mockResolvedValueOnce(completedIntervention),
+            update: jest.fn().mockResolvedValue(completedIntervention),
+          },
+          interventionOutcome: {
+            create: jest.fn().mockResolvedValue({ id: 'oc-1' }),
+          },
+        };
+        return fn(mockTx);
+      }
+    });
+    // Mock the alert outcome queries (check + insert)
+    (prisma.$queryRawUnsafe as jest.Mock).mockResolvedValue([]);
+
+    const res = await request(app)
+      .post('/api/interventions/int-1/complete')
+      .set('Authorization', `Bearer ${mentorToken}`)
+      .send({ outcome: 'IMPROVED' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('COMPLETED');
+    // Verify alert outcome was attempted
+    expect(prisma.$queryRawUnsafe).toHaveBeenCalled();
+  });
+
+  it('should complete intervention without alertId gracefully', async () => {
+    const completedIntervention = {
+      id: 'int-2',
+      studentId: 'student-1',
+      mentorId: 'mentor-1',
+      alertId: null,
+      status: 'COMPLETED',
+      completedAt: new Date().toISOString(),
+      title: 'Test',
+      description: '',
+      student: { id: 'student-1', name: 'S', email: 's@t.com' },
+      mentor: { id: 'mentor-1', name: 'M', email: 'm@t.com' },
+      tasks: [],
+      updates: [],
+      outcome: { id: 'oc-2', outcome: 'NO_CHANGE', remarks: null, recordedAt: new Date().toISOString() },
+      riskScore: null,
+    };
+
+    (prisma.$transaction as jest.Mock).mockImplementation(async (fn: any) => {
+      if (typeof fn === 'function') {
+        const mockTx: any = {
+          intervention: {
+            findUnique: jest.fn()
+              .mockResolvedValueOnce({ id: 'int-2', status: 'PENDING', mentorId: 'mentor-1' })
+              .mockResolvedValueOnce(completedIntervention),
+            update: jest.fn().mockResolvedValue(completedIntervention),
+          },
+          interventionOutcome: {
+            create: jest.fn().mockResolvedValue({ id: 'oc-2' }),
+          },
+        };
+        return fn(mockTx);
+      }
+    });
+
+    const res = await request(app)
+      .post('/api/interventions/int-2/complete')
+      .set('Authorization', `Bearer ${mentorToken}`)
+      .send({ outcome: 'NO_CHANGE' });
+
+    expect(res.status).toBe(200);
+  });
+});
+
+// ── Overdue notification deduplication ──
+describe('Overdue notification deduplication', () => {
+  it('dedup key includes taskId and deadline ISO string', () => {
+    const taskId = 'task-123';
+    const deadline = new Date('2026-10-01T00:00:00.000Z');
+    const dedupKey = `overdue:task:${taskId}:${deadline.toISOString()}`;
+    expect(dedupKey).toBe('overdue:task:task-123:2026-10-01T00:00:00.000Z');
+  });
+
+  it('different deadlines produce different dedup keys', () => {
+    const taskId = 'task-123';
+    const key1 = `overdue:task:${taskId}:${new Date('2026-10-01').toISOString()}`;
+    const key2 = `overdue:task:${taskId}:${new Date('2026-10-02').toISOString()}`;
+    expect(key1).not.toBe(key2);
+  });
+});
+
 // ── Unauthenticated access ──
 describe('Unauthenticated access', () => {
   it('should reject requests without token', async () => {

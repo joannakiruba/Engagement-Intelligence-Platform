@@ -83,6 +83,16 @@ export async function create(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  // Mark the alert as 'acted' now that an intervention was created
+  try {
+    await prisma.$queryRawUnsafe(
+      `UPDATE ml_mentor_alerts SET alert_status = 'acted' WHERE id = $1 AND alert_status != 'acted'`,
+      alertId,
+    );
+  } catch {
+    // Non-critical: alert status update failure should not block intervention creation
+  }
+
   sendSuccess(res, { existing: false, intervention: result.intervention }, 201);
 }
 
@@ -176,6 +186,29 @@ export async function complete(req: Request, res: Response): Promise<void> {
       sendError(res, 'Intervention not found.', 404);
       return;
     }
+
+    // Record alert outcome if the intervention was created from an alert
+    if (result.alertId) {
+      try {
+        const existingOutcome = await prisma.$queryRawUnsafe<Array<{ id: number }>>(
+          `SELECT id FROM ml_alert_outcomes WHERE alert_id = $1 AND intervention_id = $2 LIMIT 1`,
+          result.alertId,
+          result.id,
+        );
+        if (!existingOutcome.length) {
+          await prisma.$queryRawUnsafe(
+            `INSERT INTO ml_alert_outcomes (alert_id, mentor_response, intervention_id, was_recommendation_followed, outcome_notes)
+             VALUES ($1, 'acted', $2, true, $3)`,
+            result.alertId,
+            result.id,
+            remarks || null,
+          );
+        }
+      } catch {
+        // Non-critical: alert outcome recording failure should not block completion response
+      }
+    }
+
     sendSuccess(res, result);
   } catch (err) {
     if (err instanceof ConflictError) {

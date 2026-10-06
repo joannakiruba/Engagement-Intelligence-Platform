@@ -20,7 +20,7 @@ router.get(
   validate(listSchema, 'query'),
   async (req: Request, res: Response): Promise<void> => {
     const userId = req.user!.sub;
-    const { unreadOnly, type, limit, offset } = req.query as any;
+    const { unreadOnly, type, limit, offset } = ((req as any).validatedQuery || req.query) as any;
 
     const where: any = { userId };
     if (unreadOnly === 'true') where.isRead = false;
