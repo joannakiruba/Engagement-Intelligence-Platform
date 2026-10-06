@@ -131,6 +131,7 @@ export const PERMISSIONS: PermissionDef[] = [
 
   // ---- Notifications ----
   { code: 'notifications:read:own', description: "Read one's own notifications" },
+  { code: 'notifications:update:own', description: "Mark one's own notifications as read" },
 
   // ---- Events & Proofs ----
   { code: 'events:create', description: 'Create events' },
@@ -178,6 +179,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'risk_scores:read:own',
     'interventions:read:own',
     'notifications:read:own',
+    'notifications:update:own',
     'events:read:any',
     'event_registrations:create:self',
     'event_registrations:read:own',
@@ -206,6 +208,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'risk_scores:read:category:batch',
     'risk_scores:calculate:batch',
     'notifications:read:own',
+    'notifications:update:own',
     'events:read:any',
     'proofs:read:batch',
     'proofs:approve:batch',
@@ -230,6 +233,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'risk_scores:read:any',
     'interventions:read:any',
     'notifications:read:own',
+    'notifications:update:own',
     'events:read:any',
     'tasks:read:any',
   ],
@@ -250,6 +254,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'interventions:log_outcome:own',
     'interventions:read:assigned',
     'notifications:read:own',
+    'notifications:update:own',
     'events:read:any',
     // Deliberately no proofs:* or event_registrations:* — not an input to
     // the risk engine today (README Module 12 rules: attendance /
@@ -272,6 +277,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'assessments:read:any',
     'risk_scores:read:any', // placement-readiness tracking
     'notifications:read:own',
+    'notifications:update:own',
     'events:create',
     'events:update:any',
     'events:read:any',
@@ -312,6 +318,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'risk_scores:calculate:any',
     'interventions:read:any',
     'notifications:read:own',
+    'notifications:update:own',
     'events:create',
     'events:update:any',
     'events:read:any',

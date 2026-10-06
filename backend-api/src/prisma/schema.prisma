@@ -472,12 +472,18 @@ model Intervention {
 
   riskScoreId String?
 
+  causeCode String?
+
+  alertId Int?
+
   title       String
   description String
 
   status InterventionStatus @default(PENDING)
 
   deadline DateTime?
+
+  completedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -492,6 +498,8 @@ model Intervention {
 
   outcome InterventionOutcome?
 
+  tasks InterventionTask[]
+
   @@map("interventions")
 }
 
@@ -502,11 +510,35 @@ model InterventionUpdate {
 
   note String
 
+  editedAt DateTime?
+
   createdAt DateTime @default(now())
 
   intervention Intervention @relation(fields: [interventionId], references: [id])
 
   @@map("intervention_updates")
+}
+
+model InterventionTask {
+  id String @id @default(uuid())
+
+  interventionId String
+
+  title       String
+  description String?
+
+  deadline DateTime?
+
+  isCompleted Boolean @default(false)
+
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  intervention Intervention @relation(fields: [interventionId], references: [id])
+
+  @@map("intervention_tasks")
 }
 
 model InterventionOutcome {
@@ -537,10 +569,16 @@ model Notification {
 
   isRead Boolean @default(false)
 
+  referenceId   String?
+  referenceType String?
+
+  deduplicationKey String?
+
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
+  @@unique([deduplicationKey])
   @@map("notifications")
 }
 
