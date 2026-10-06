@@ -242,27 +242,23 @@ export async function completeIntervention(
     });
 
     if (intervention.alertId) {
-      try {
-        const alertRows = await tx.$queryRawUnsafe<Array<{ created_at: Date; acted_at: Date | null }>>(
-          `SELECT created_at, acted_at FROM ml_mentor_alerts WHERE id = $1`,
-          intervention.alertId,
-        );
-        const responseTimeHours = alertRows.length && alertRows[0].acted_at
-          ? (new Date(alertRows[0].acted_at).getTime() - new Date(alertRows[0].created_at).getTime()) / 3_600_000
-          : null;
+      const alertRows = await tx.$queryRawUnsafe<Array<{ created_at: Date; acted_at: Date | null }>>(
+        `SELECT created_at, acted_at FROM ml_mentor_alerts WHERE id = $1`,
+        intervention.alertId,
+      );
+      const responseTimeHours = alertRows.length && alertRows[0].acted_at
+        ? (new Date(alertRows[0].acted_at).getTime() - new Date(alertRows[0].created_at).getTime()) / 3_600_000
+        : null;
 
-        await tx.$queryRawUnsafe(
-          `INSERT INTO ml_alert_outcomes (alert_id, mentor_response, intervention_id, was_recommendation_followed, response_time_hours, outcome_notes)
-           VALUES ($1, 'acted', $2, NULL, $3, $4)
-           ON CONFLICT (alert_id, intervention_id) WHERE intervention_id IS NOT NULL DO NOTHING`,
-          intervention.alertId,
-          interventionId,
-          responseTimeHours,
-          remarks || null,
-        );
-      } catch (err) {
-        logger.error(`Failed to record alert outcome for alertId=${intervention.alertId}: ${err}`);
-      }
+      await tx.$queryRawUnsafe(
+        `INSERT INTO ml_alert_outcomes (alert_id, mentor_response, intervention_id, was_recommendation_followed, response_time_hours, outcome_notes)
+         VALUES ($1, 'acted', $2, NULL, $3, $4)
+         ON CONFLICT (alert_id, intervention_id) WHERE intervention_id IS NOT NULL DO NOTHING`,
+        intervention.alertId,
+        interventionId,
+        responseTimeHours,
+        remarks || null,
+      );
     }
 
     await tx.auditLog.create({
@@ -335,6 +331,7 @@ export async function createTask(
   interventionId: string,
   mentorId: string,
   data: { title: string; description?: string; deadline?: Date | null },
+  ipAddress?: string,
 ) {
   return prisma.$transaction(async (tx) => {
     const intervention = await tx.intervention.findUnique({
@@ -347,7 +344,7 @@ export async function createTask(
       throw new ConflictError('Cannot add tasks to a terminal intervention.');
     }
 
-    return tx.interventionTask.create({
+    const task = await tx.interventionTask.create({
       data: {
         interventionId,
         title: data.title,
@@ -355,6 +352,19 @@ export async function createTask(
         deadline: data.deadline || null,
       },
     });
+
+    await tx.auditLog.create({
+      data: {
+        userId: mentorId,
+        entityType: 'InterventionTask',
+        entityId: task.id,
+        action: 'TASK_CREATED',
+        newValues: { interventionId, title: data.title, description: data.description || null, deadline: data.deadline || null },
+        ipAddress: ipAddress || null,
+      },
+    });
+
+    return task;
   });
 }
 
@@ -362,6 +372,7 @@ export async function updateTask(
   taskId: string,
   mentorId: string,
   data: { title?: string; description?: string; deadline?: Date | null; isCompleted?: boolean },
+  ipAddress?: string,
 ) {
   return prisma.$transaction(async (tx) => {
     const task = await tx.interventionTask.findUnique({
@@ -374,6 +385,8 @@ export async function updateTask(
       throw new ConflictError('Cannot modify tasks on a terminal intervention.');
     }
 
+    const oldValues = { title: task.title, description: task.description, deadline: task.deadline, isCompleted: task.isCompleted };
+
     const updateData: Prisma.InterventionTaskUpdateInput = {};
     if (data.title !== undefined) updateData.title = data.title;
     if (data.description !== undefined) updateData.description = data.description || null;
@@ -382,10 +395,25 @@ export async function updateTask(
       updateData.isCompleted = data.isCompleted;
       updateData.completedAt = data.isCompleted ? new Date() : null;
     }
-    return tx.interventionTask.update({
+
+    const updated = await tx.interventionTask.update({
       where: { id: taskId },
       data: updateData,
     });
+
+    await tx.auditLog.create({
+      data: {
+        userId: mentorId,
+        entityType: 'InterventionTask',
+        entityId: taskId,
+        action: 'TASK_UPDATED',
+        oldValues,
+        newValues: data,
+        ipAddress: ipAddress || null,
+      },
+    });
+
+    return updated;
   });
 }
 
@@ -402,6 +430,7 @@ export async function createNote(
   interventionId: string,
   mentorId: string,
   note: string,
+  ipAddress?: string,
 ) {
   return prisma.$transaction(async (tx) => {
     const intervention = await tx.intervention.findUnique({
@@ -414,9 +443,22 @@ export async function createNote(
       throw new ConflictError('Cannot add notes to a terminal intervention.');
     }
 
-    return tx.interventionUpdate.create({
+    const created = await tx.interventionUpdate.create({
       data: { interventionId, note },
     });
+
+    await tx.auditLog.create({
+      data: {
+        userId: mentorId,
+        entityType: 'InterventionUpdate',
+        entityId: created.id,
+        action: 'NOTE_CREATED',
+        newValues: { interventionId, note },
+        ipAddress: ipAddress || null,
+      },
+    });
+
+    return created;
   });
 }
 
@@ -424,11 +466,12 @@ export async function updateNote(
   noteId: string,
   mentorId: string,
   note: string,
+  ipAddress?: string,
 ) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.interventionUpdate.findUnique({
       where: { id: noteId },
-      include: { intervention: { select: { mentorId: true, status: true } } },
+      include: { intervention: { select: { id: true, mentorId: true, status: true } } },
     });
     if (!existing) return null;
     if (existing.intervention.mentorId !== mentorId) return null;
@@ -436,21 +479,36 @@ export async function updateNote(
       throw new ConflictError('Cannot modify notes on a completed or cancelled intervention.');
     }
 
-    return tx.interventionUpdate.update({
+    const updated = await tx.interventionUpdate.update({
       where: { id: noteId },
       data: { note, editedAt: new Date() },
     });
+
+    await tx.auditLog.create({
+      data: {
+        userId: mentorId,
+        entityType: 'InterventionUpdate',
+        entityId: noteId,
+        action: 'NOTE_UPDATED',
+        oldValues: { note: existing.note },
+        newValues: { note },
+        ipAddress: ipAddress || null,
+      },
+    });
+
+    return updated;
   });
 }
 
 export async function deleteNote(
   noteId: string,
   mentorId: string,
+  ipAddress?: string,
 ) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.interventionUpdate.findUnique({
       where: { id: noteId },
-      include: { intervention: { select: { mentorId: true, status: true } } },
+      include: { intervention: { select: { id: true, mentorId: true, status: true } } },
     });
     if (!existing) return null;
     if (existing.intervention.mentorId !== mentorId) return null;
@@ -458,7 +516,20 @@ export async function deleteNote(
       throw new ConflictError('Cannot delete notes on a completed or cancelled intervention.');
     }
 
-    return tx.interventionUpdate.delete({ where: { id: noteId } });
+    const deleted = await tx.interventionUpdate.delete({ where: { id: noteId } });
+
+    await tx.auditLog.create({
+      data: {
+        userId: mentorId,
+        entityType: 'InterventionUpdate',
+        entityId: noteId,
+        action: 'NOTE_DELETED',
+        oldValues: { note: existing.note, interventionId: existing.interventionId },
+        ipAddress: ipAddress || null,
+      },
+    });
+
+    return deleted;
   });
 }
 

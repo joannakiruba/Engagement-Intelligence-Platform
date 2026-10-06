@@ -231,7 +231,7 @@ export async function createTask(req: Request, res: Response): Promise<void> {
       title,
       description,
       deadline: deadline ? new Date(deadline) : null,
-    });
+    }, req.ip);
     if (!task) {
       sendError(res, 'Intervention not found.', 404);
       return;
@@ -257,7 +257,7 @@ export async function updateTask(req: Request, res: Response): Promise<void> {
   }
 
   try {
-    const updated = await svc.updateTask(task.id, userId, { title, description, deadline, isCompleted });
+    const updated = await svc.updateTask(task.id, userId, { title, description, deadline, isCompleted }, req.ip);
     if (!updated) {
       sendError(res, 'Task not found.', 404);
       return;
@@ -278,7 +278,7 @@ export async function createNote(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
 
   try {
-    const note = await svc.createNote(param(req, 'id'), userId, req.body.note);
+    const note = await svc.createNote(param(req, 'id'), userId, req.body.note, req.ip);
     if (!note) {
       sendError(res, 'Intervention not found.', 404);
       return;
@@ -297,7 +297,7 @@ export async function updateNote(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
 
   try {
-    const updated = await svc.updateNote(param(req, 'noteId'), userId, req.body.note);
+    const updated = await svc.updateNote(param(req, 'noteId'), userId, req.body.note, req.ip);
     if (!updated) {
       sendError(res, 'Note not found.', 404);
       return;
@@ -316,7 +316,7 @@ export async function deleteNote(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
 
   try {
-    const result = await svc.deleteNote(param(req, 'noteId'), userId);
+    const result = await svc.deleteNote(param(req, 'noteId'), userId, req.ip);
     if (!result) {
       sendError(res, 'Note not found.', 404);
       return;
