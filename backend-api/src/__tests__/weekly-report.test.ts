@@ -1,5 +1,6 @@
 import express from 'express';
 import request from 'supertest';
+import { ROLE_PERMISSIONS } from '../prisma/permission-catalog';
 
 const MENTOR_ID = '00000000-0000-4000-a000-00000000m001';
 const MENTOR2_ID = '00000000-0000-4000-a000-00000000m002';
@@ -12,6 +13,13 @@ const ADMIN_ROLE = 'role-admin';
 const MENTOR_ROLE = 'role-mentor';
 const STUDENT_ROLE = 'role-student';
 const TRAINER_ROLE = 'role-trainer';
+
+const ROLE_ID_TO_PERMS: Record<string, string[]> = {
+  [ADMIN_ROLE]: ROLE_PERMISSIONS.ADMIN,
+  [MENTOR_ROLE]: ROLE_PERMISSIONS.MENTOR,
+  [STUDENT_ROLE]: ROLE_PERMISSIONS.STUDENT,
+  [TRAINER_ROLE]: ROLE_PERMISSIONS.TRAINER,
+};
 
 const fns = {
   userFindUnique: jest.fn(),
@@ -61,7 +69,12 @@ import {
 
 function mockAuth(userId: string, roleId: string) {
   return (req: any, _res: any, next: any) => {
-    req.user = { sub: userId, roleId, exp: Math.floor(Date.now() / 1000) + 3600 };
+    req.user = {
+      sub: userId,
+      roleId,
+      permissions: ROLE_ID_TO_PERMS[roleId] ?? [],
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    };
     next();
   };
 }
