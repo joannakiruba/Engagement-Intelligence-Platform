@@ -62,12 +62,16 @@ export const weeklyReportQueue = new Queue('weekly-report', defaultQueueOptions)
 
 logger.info('BullMQ queues initialized');
 
+// Overdue-check queue for intervention task deadline monitoring
+export const overdueCheckQueue = new Queue('overdue-check', defaultQueueOptions);
+
 // Graceful shutdown
 export async function closeQueues(): Promise<void> {
   await Promise.all([
     emailQueue.close(),
     mentorAlertQueue.close(),
     weeklyReportQueue.close(),
+    overdueCheckQueue.close(),
     redisConnection.quit(),
   ]);
   logger.info('All queues closed');

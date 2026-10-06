@@ -135,7 +135,7 @@ describe('queueWeeklyReport', () => {
 describe('closeQueues', () => {
   it('closes all queues and redis', async () => {
     await closeQueues();
-    expect(mockClose).toHaveBeenCalledTimes(3);
+    expect(mockClose).toHaveBeenCalledTimes(4);
     expect(mockQuit).toHaveBeenCalledTimes(1);
   });
 });

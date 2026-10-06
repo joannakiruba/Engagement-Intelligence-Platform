@@ -1,5 +1,6 @@
 """Orchestrates the full mentor alert pipeline."""
 
+import json
 from datetime import datetime
 from typing import Optional
 import asyncpg
@@ -60,7 +61,8 @@ async def generate_alerts(
         alerts.append(alert)
 
     alerts.sort(key=lambda a: a.priority_score, reverse=True)
-    await _persist_alerts(pool, alerts)
+    features_map = {f.student_id: f for f in high_risk}
+    await _persist_alerts(pool, alerts, features_map)
 
     return GenerateAlertsResponse(
         total_students_analyzed=len(all_features),
@@ -79,12 +81,46 @@ async def _get_last_alert_date(pool: asyncpg.Pool, student_id: str) -> Optional[
         return row["created_at"] if row else None
 
 
-async def _persist_alerts(pool: asyncpg.Pool, alerts: list[MentorAlert]) -> None:
+def _derive_cause_codes(features: StudentFeatures) -> list[dict]:
+    """Derive structured cause codes from actual risk evidence."""
+    causes = []
+    if features.attendance_pct_4w < 75 or features.consecutive_absences >= 3:
+        causes.append({
+            "cause_code": "ATTENDANCE_DECLINE",
+            "evidence": {
+                "attendance_pct_4w": features.attendance_pct_4w,
+                "consecutive_absences": features.consecutive_absences,
+                "attendance_trend_slope": features.attendance_trend_slope,
+            },
+        })
+    if features.avg_score_4w < 50 or features.score_trend_slope < -10:
+        causes.append({
+            "cause_code": "ASSESSMENT_UNDERPERFORMANCE",
+            "evidence": {
+                "avg_score_4w": features.avg_score_4w,
+                "score_trend_slope": features.score_trend_slope,
+                "failed_assessments_count": features.failed_assessments_count,
+            },
+        })
+    if features.effort_rating_avg < 2.5 or features.participation_rating_avg < 2.5 or features.feedback_sentiment_avg < -0.3:
+        causes.append({
+            "cause_code": "FEEDBACK_CONCERN",
+            "evidence": {
+                "effort_rating_avg": features.effort_rating_avg,
+                "participation_rating_avg": features.participation_rating_avg,
+                "feedback_sentiment_avg": features.feedback_sentiment_avg,
+                "negative_feedback_count": features.negative_feedback_count,
+            },
+        })
+    return causes
+
+
+async def _persist_alerts(pool: asyncpg.Pool, alerts: list[MentorAlert], features_map: dict[str, StudentFeatures] | None = None) -> None:
     if not alerts:
         return
     async with pool.acquire() as conn:
         for alert in alerts:
-            await conn.execute("""
+            row = await conn.fetchrow("""
                 INSERT INTO ml_mentor_alerts (
                     student_id, mentor_id, batch_id,
                     priority_score, urgency_tier, trigger_reason,
@@ -92,11 +128,20 @@ async def _persist_alerts(pool: asyncpg.Pool, alerts: list[MentorAlert]) -> None
                     recommended_intervention, recommendation_confidence,
                     recommendation_reasoning, alert_status, created_at
                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                RETURNING id
             """, alert.student_id, alert.mentor_id, alert.batch_id,
                 alert.priority_score, alert.urgency_tier.value, alert.trigger_reason,
                 alert.risk_score, alert.risk_velocity,
                 alert.recommended_intervention, alert.recommendation_confidence,
                 alert.recommendation_reasoning, "pending", alert.created_at)
+            alert_id = row["id"]
+            if features_map and alert.student_id in features_map:
+                causes = _derive_cause_codes(features_map[alert.student_id])
+                for cause in causes:
+                    await conn.execute("""
+                        INSERT INTO ml_alert_causes (alert_id, cause_code, evidence)
+                        VALUES ($1, $2, $3::jsonb)
+                    """, alert_id, cause["cause_code"], json.dumps(cause["evidence"]))
 
 
 async def get_alerts_for_mentor(pool: asyncpg.Pool, mentor_id: str) -> list[dict]:

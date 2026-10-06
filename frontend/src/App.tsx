@@ -21,6 +21,9 @@ import ExcusedReview from "./pages/attendance/ExcusedReview";
 import FeedbackList from "./pages/feedback/FeedbackList";
 import FeedbackForm from "./pages/feedback/FeedbackForm";
 import FeedbackDetail from "./pages/feedback/FeedbackDetail";
+import InterventionList from "./pages/interventions/InterventionList";
+import InterventionDetail from "./pages/interventions/InterventionDetail";
+import NotificationPanel from "./pages/interventions/NotificationPanel";
 import {
   getEvents,
   getMyProofs,
@@ -65,6 +68,10 @@ function getNavLinks(role: string): { label: string; to: string }[] {
     links.push({ label: "Feedback", to: "/feedback" });
   }
 
+  if (["MENTOR", "STUDENT", "FACULTY", "ADMIN"].includes(role)) {
+    links.push({ label: "Interventions", to: "/interventions" });
+  }
+
   links.push({ label: "Proofs", to: "/proofs" });
 
   return links;
@@ -94,7 +101,10 @@ function AppNav() {
             <Link to="/profile" className="text-gray-600 hover:text-gray-900">
               My Profile
             </Link>
-            <span className="ml-auto text-sm text-gray-500">
+            <div className="ml-auto flex items-center gap-4">
+              <NotificationPanel />
+            </div>
+            <span className="text-sm text-gray-500">
               {user.name}{" "}
               <span className="text-xs text-gray-400">({user.role})</span>
             </span>
@@ -837,6 +847,32 @@ function AppRoutes() {
                   ]}
                 >
                   <FeedbackDetail />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+
+          {/* Interventions */}
+          <Route
+            path="/interventions"
+            element={
+              <RequireAuth>
+                <RequireRole
+                  roles={["MENTOR", "STUDENT", "FACULTY", "ADMIN"]}
+                >
+                  <InterventionList />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/interventions/:id"
+            element={
+              <RequireAuth>
+                <RequireRole
+                  roles={["MENTOR", "STUDENT", "FACULTY", "ADMIN"]}
+                >
+                  <InterventionDetail />
                 </RequireRole>
               </RequireAuth>
             }
