@@ -1,120 +1,118 @@
-import { Router, Request, Response, NextFunction } from 'express';
-import Joi from 'joi';
-import prisma from '../lib/prisma';
-import { sendSuccess, sendError } from '../utils/response';
+import { Router } from 'express';
 import { requirePermission } from '../auth/rbac.middleware';
 import { validate } from '../middleware/validate.middleware';
+import {
+  createEventSchema,
+  updateEventSchema,
+  createRoundSchema,
+  updateRoundSchema,
+  setRegistrationStatusSchema,
+} from '../validators/events.validator';
+import {
+  createEventHandler,
+  updateEventHandler,
+  closeEventHandler,
+  reopenEventHandler,
+  deleteEventHandler,
+  addRoundHandler,
+  updateRoundHandler,
+  deleteRoundHandler,
+  listEventsHandler,
+  getEventHandler,
+  studentEventsHandler,
+  setStatusHandler,
+  getRegistrationsHandler,
+} from '../controllers/events.controller';
 
 const router = Router();
 
-const createEventSchema = Joi.object({
-  title: Joi.string().min(1).max(200).required(),
-  description: Joi.string().max(2000).allow(null, '').optional(),
-  eventType: Joi.string().min(1).max(100).required(),
-  eventDate: Joi.date().iso().required(),
-  registrationDeadline: Joi.date().iso().allow(null).optional(),
-});
+// Student routes — GET /my-events must be registered before /:id
+router.get(
+  '/my-events',
+  requirePermission('events:read:own', 'events:read:batch', 'events:read:any'),
+  studentEventsHandler,
+);
 
-const updateEventSchema = Joi.object({
-  title: Joi.string().min(1).max(200).optional(),
-  description: Joi.string().max(2000).allow(null, '').optional(),
-  eventType: Joi.string().min(1).max(100).optional(),
-  eventDate: Joi.date().iso().optional(),
-  registrationDeadline: Joi.date().iso().allow(null).optional(),
-}).min(1);
+router.patch(
+  '/:id/status',
+  requirePermission('events:update:own', 'events:update:batch', 'events:update:any'),
+  validate(setRegistrationStatusSchema),
+  setStatusHandler,
+);
 
-router.get('/', requirePermission('events:read:any'), async (_req: Request, res: Response, next: NextFunction) => {
-  try {
-    const events = await prisma.event.findMany({
-      include: {
-        _count: { select: { registrations: true, proofSubmissions: true } },
-      },
-      orderBy: { eventDate: 'desc' },
-    });
-    return sendSuccess(res, events);
-  } catch (err) {
-    next(err);
-  }
-});
+// Trainer/admin list & detail
+router.get(
+  '/',
+  requirePermission('events:read:batch', 'events:read:any'),
+  listEventsHandler,
+);
 
-router.get('/:id', requirePermission('events:read:any'), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const event = await prisma.event.findUnique({
-      where: { id: String(req.params.id) },
-      include: {
-        registrations: {
-          include: { student: { select: { id: true, name: true, email: true } } },
-        },
-        proofSubmissions: {
-          include: { student: { select: { id: true, name: true, email: true } } },
-        },
-      },
-    });
-    if (!event) return sendError(res, 'Event not found', 404);
-    return sendSuccess(res, event);
-  } catch (err) {
-    next(err);
-  }
-});
+router.get(
+  '/:id',
+  requirePermission('events:read:own', 'events:read:batch', 'events:read:any'),
+  getEventHandler,
+);
 
+// CRUD
 router.post(
   '/',
-  requirePermission('events:create'),
+  requirePermission('events:create:batch', 'events:create:any'),
   validate(createEventSchema),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { title, description, eventType, eventDate, registrationDeadline } = req.body;
-
-      const event = await prisma.event.create({
-        data: {
-          title,
-          description: description || null,
-          eventType,
-          eventDate: new Date(eventDate),
-          registrationDeadline: registrationDeadline
-            ? new Date(registrationDeadline)
-            : null,
-        },
-      });
-
-      return sendSuccess(res, event, 201);
-    } catch (err) {
-      next(err);
-    }
-  },
+  createEventHandler,
 );
 
 router.put(
   '/:id',
-  requirePermission('events:update:any'),
+  requirePermission('events:update:own', 'events:update:batch', 'events:update:any'),
   validate(updateEventSchema),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const existing = await prisma.event.findUnique({ where: { id: String(req.params.id) } });
-      if (!existing) return sendError(res, 'Event not found', 404);
+  updateEventHandler,
+);
 
-      const { title, description, eventType, eventDate, registrationDeadline } = req.body;
-      const data: Record<string, unknown> = {};
-      if (title !== undefined) data.title = title;
-      if (description !== undefined) data.description = description;
-      if (eventType !== undefined) data.eventType = eventType;
-      if (eventDate !== undefined) data.eventDate = new Date(eventDate);
-      if (registrationDeadline !== undefined) {
-        data.registrationDeadline = registrationDeadline
-          ? new Date(registrationDeadline)
-          : null;
-      }
+router.delete(
+  '/:id',
+  requirePermission('events:delete:batch', 'events:delete:any'),
+  deleteEventHandler,
+);
 
-      const event = await prisma.event.update({
-        where: { id: String(req.params.id) },
-        data,
-      });
+// Close/Reopen
+router.post(
+  '/:id/close',
+  requirePermission('events:update:own', 'events:update:batch', 'events:update:any'),
+  closeEventHandler,
+);
 
-      return sendSuccess(res, event);
-    } catch (err) {
-      next(err);
-    }
-  },
+router.post(
+  '/:id/reopen',
+  requirePermission('events:update:own', 'events:update:batch', 'events:update:any'),
+  reopenEventHandler,
+);
+
+// Rounds
+router.post(
+  '/:id/rounds',
+  requirePermission('events:update:own', 'events:update:batch', 'events:update:any'),
+  validate(createRoundSchema),
+  addRoundHandler,
+);
+
+router.put(
+  '/:id/rounds/:roundId',
+  requirePermission('events:update:own', 'events:update:batch', 'events:update:any'),
+  validate(updateRoundSchema),
+  updateRoundHandler,
+);
+
+router.delete(
+  '/:id/rounds/:roundId',
+  requirePermission('events:update:own', 'events:update:batch', 'events:update:any'),
+  deleteRoundHandler,
+);
+
+// Registrations
+router.get(
+  '/:id/registrations',
+  requirePermission('events:read:batch', 'events:read:any'),
+  getRegistrationsHandler,
 );
 
 export default router;

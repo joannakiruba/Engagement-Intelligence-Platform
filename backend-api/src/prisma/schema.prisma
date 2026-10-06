@@ -52,6 +52,7 @@ enum NotificationType {
   INTERVENTION
   GENERAL
   TASK_UPDATE
+  EVENT_UPDATE
 }
 
 enum ProofStatus {
@@ -85,6 +86,30 @@ enum TaskProgress {
   IN_PROGRESS
   ALMOST_COMPLETED
   COMPLETED
+}
+
+enum EventCategory {
+  CODING
+  HACKATHON
+  OTHER
+}
+
+enum EventMode {
+  ONLINE
+  OFFLINE
+}
+
+enum EventRoundStatus {
+  UPCOMING
+  ONGOING
+  DONE
+}
+
+enum RegistrationStatus {
+  PENDING
+  INTERESTED
+  REGISTERED
+  WITHDRAWN
 }
 
 model Role {
@@ -179,6 +204,7 @@ model User {
 
   eventRegistrations EventRegistration[]
   proofSubmissions   ProofSubmission[]
+  createdEvents      Event[]
 
   auditLogs AuditLog[]
   sessions  Session[]
@@ -210,6 +236,7 @@ model Batch {
   sessions    Session[]
   assessments Assessment[]
   taskBatches TaskBatch[]
+  eventBatches EventBatch[]
 
   @@map("batches")
 }
@@ -676,19 +703,62 @@ model Event {
   title       String
   description String?
 
-  eventType String
+  category    EventCategory @default(OTHER)
+  isMandatory Boolean       @default(false)
 
-  eventDate DateTime
+  officialLink String?
+  startDate    DateTime?
+  endDate      DateTime?
+  mode         EventMode?
+  venue        String?
+  fee          Float?
 
-  registrationDeadline DateTime?
+  closedAt DateTime?
+
+  createdById String
+  createdBy   User @relation(fields: [createdById], references: [id])
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  eventBatches  EventBatch[]
+  rounds        EventRound[]
   registrations EventRegistration[]
 
   proofSubmissions ProofSubmission[]
 
   @@map("events")
+}
+
+model EventBatch {
+  eventId String
+  batchId String
+  @@map("event_batches")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, batchId])
+}
+
+model EventRound {
+  id String @id @default(uuid())
+  @@map("event_rounds")
+
+  eventId String
+
+  name String
+
+  roundDate DateTime?
+  deadline  DateTime?
+
+  status EventRoundStatus @default(UPCOMING)
+
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
 }
 
 model EventRegistration {
@@ -697,9 +767,12 @@ model EventRegistration {
   eventId   String
   studentId String
 
-  registeredAt DateTime @default(now())
+  status RegistrationStatus @default(PENDING)
 
-  event Event @relation(fields: [eventId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   student User @relation(fields: [studentId], references: [id])
 

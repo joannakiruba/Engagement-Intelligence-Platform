@@ -32,6 +32,9 @@ import FeedbackDetail from "./pages/feedback/FeedbackDetail";
 import InterventionList from "./pages/interventions/InterventionList";
 import InterventionDetail from "./pages/interventions/InterventionDetail";
 import NotificationPanel from "./pages/interventions/NotificationPanel";
+import EventList from "./pages/events/EventList";
+import EventDetail from "./pages/events/EventDetail";
+import EventForm from "./pages/events/EventForm";
 import {
   getEvents,
   getMyProofs,
@@ -903,6 +906,44 @@ function AppRoutes() {
                 >
                   <InterventionDetail />
                 </RequireRole>
+              </RequireAuth>
+            }
+          />
+
+          {/* Events */}
+          <Route
+            path="/events"
+            element={
+              <RequireAuth>
+                <EventList />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/events/create"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER", "COORDINATOR", "ADMIN"]}>
+                  <EventForm />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/events/:id/edit"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["TRAINER", "COORDINATOR", "ADMIN"]}>
+                  <EventForm />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/events/:id"
+            element={
+              <RequireAuth>
+                <EventDetail />
               </RequireAuth>
             }
           />

@@ -533,6 +533,7 @@ async function main() {
 
   console.log('\nSeeding events...');
   const eventIds: string[] = [];
+  const creatorId = trainerIds[0];
 
   for (const def of EVENT_DEFS) {
     const event = await prisma.event.create({
@@ -547,6 +548,76 @@ async function main() {
     eventIds.push(event.id);
     console.log(`  Event: ${def.title} (${def.type})`);
   }
+
+  // Ticket 19 events: CodeVita, GSoC, ICPC
+  const codeVita = await prisma.event.create({
+    data: {
+      title: 'CodeVita 2026',
+      createdById: creatorId,
+    },
+  });
+  eventIds.push(codeVita.id);
+  console.log('  Event: CodeVita 2026 (voluntary, no batches)');
+
+  const gsoc = await prisma.event.create({
+    data: {
+      title: 'GSoC 2026 Preparation',
+      description: 'Prepare students for Google Summer of Code 2026 with structured rounds.',
+      createdById: creatorId,
+    },
+  });
+  eventIds.push(gsoc.id);
+
+  await prisma.eventBatch.createMany({
+    data: [
+      { eventId: gsoc.id, batchId: batchIds[0] },
+      { eventId: gsoc.id, batchId: batchIds[1] },
+    ],
+  });
+
+  await prisma.eventRound.createMany({
+    data: [
+      { eventId: gsoc.id, name: 'Proposal Workshop', roundDate: dateOffset(5), deadline: dateOffset(7), status: 'DONE' },
+      { eventId: gsoc.id, name: 'Mock Evaluation', roundDate: dateOffset(10), deadline: dateOffset(12), status: 'ONGOING' },
+      { eventId: gsoc.id, name: 'Final Prep', roundDate: dateOffset(18), deadline: dateOffset(20), status: 'UPCOMING' },
+    ],
+  });
+  console.log('  Event: GSoC 2026 Preparation (voluntary, 2 batches, 3 rounds)');
+
+  const icpc = await prisma.event.create({
+    data: {
+      title: 'ICPC Regional 2026',
+      description: 'Mandatory competitive programming regional qualifier.',
+      category: 'CODING',
+      isMandatory: true,
+      createdById: creatorId,
+    },
+  });
+  eventIds.push(icpc.id);
+
+  await prisma.eventBatch.create({
+    data: { eventId: icpc.id, batchId: batchIds[0] },
+  });
+
+  const batch0Start = 0;
+  const batch0End = Math.min(studentsPerBatch, studentIds.length);
+  const batch0Students = studentIds.slice(batch0Start, batch0End);
+
+  await prisma.eventRegistration.createMany({
+    data: batch0Students.map((studentId) => ({
+      eventId: icpc.id,
+      studentId,
+      status: 'PENDING' as const,
+    })),
+  });
+
+  for (let i = 0; i < Math.min(5, batch0Students.length); i++) {
+    await prisma.eventRegistration.update({
+      where: { eventId_studentId: { eventId: icpc.id, studentId: batch0Students[i] } },
+      data: { status: 'REGISTERED' },
+    });
+  }
+  console.log(`  Event: ICPC Regional 2026 (mandatory, CODING, batch 0, ${batch0Students.length} registrations, 5 REGISTERED)`);
 
   // ── Phase 15: Event Registrations ──
 
