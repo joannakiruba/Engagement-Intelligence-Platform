@@ -17,7 +17,8 @@
     { "name": "Assessments", "description": "Assessment CRUD, sections, questions, scoring" },
     { "name": "Attendance", "description": "Session attendance tracking" },
     { "name": "Feedback", "description": "Trainer feedback on students" },
-    { "name": "Mentor Assignments", "description": "Mentor-student assignment management" }
+    { "name": "Mentor Assignments", "description": "Mentor-student assignment management" },
+    { "name": "Weekly Reports", "description": "Weekly risk analysis reports for mentors" }
   ],
   "components": {
     "securitySchemes": {
@@ -510,6 +511,50 @@
     "/api/mentor-assignments/{id}": {
       "get": { "summary": "Get assignment by ID", "tags": ["Mentor Assignments"], "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }], "responses": { "200": { "description": "Assignment", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/MentorAssignment" } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
       "delete": { "summary": "Delete assignment", "tags": ["Mentor Assignments"], "security": [{ "BearerAuth": [] }], "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }], "responses": { "200": { "description": "Deleted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/weekly-reports/preview": {
+      "get": {
+        "summary": "Preview weekly risk report",
+        "description": "Returns the same data that would be emailed to a mentor, without sending. Mentors see their own report; admins can specify any mentorId.",
+        "tags": ["Weekly Reports"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "mentorId", "in": "query", "description": "Mentor UUID (admin only — defaults to the caller)", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "weekStart", "in": "query", "description": "ISO-8601 start of the reporting period", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "weekEnd", "in": "query", "description": "ISO-8601 exclusive end of the reporting period", "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": {
+          "200": { "description": "Weekly report data", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": { "mentorId": { "type": "string", "format": "uuid" }, "mentorName": { "type": "string" }, "mentorEmail": { "type": "string", "format": "email" }, "weekStart": { "type": "string", "format": "date-time" }, "weekEnd": { "type": "string", "format": "date-time" }, "students": { "type": "array", "items": { "type": "object", "properties": { "studentId": { "type": "string", "format": "uuid" }, "name": { "type": "string" }, "riskLevel": { "type": "string", "enum": ["MEDIUM", "HIGH"] }, "riskScore": { "type": "number" }, "trend": { "type": "string" }, "reasons": { "type": "array", "items": { "type": "string" } }, "dataAvailability": { "type": "object", "nullable": true, "properties": { "attendance": { "type": "boolean" }, "assessment": { "type": "boolean" }, "feedback": { "type": "boolean" } } }, "batchId": { "type": "string", "format": "uuid", "nullable": true } } } }, "generatedAt": { "type": "string", "format": "date-time" } } } } } } } },
+          "400": { "description": "Invalid date range (missing pair, reversed, >31 days, or unparseable dates)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "403": { "description": "Insufficient permissions", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "404": { "description": "Mentor not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/api/weekly-reports/trigger": {
+      "post": {
+        "summary": "Trigger weekly reports for all mentors",
+        "description": "Enqueues a weekly report job for every mentor with active student assignments. Admin only.",
+        "tags": ["Weekly Reports"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "weekStart": { "type": "string", "format": "date-time" }, "weekEnd": { "type": "string", "format": "date-time" } } } } } },
+        "responses": {
+          "202": { "description": "Reports queued", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": { "message": { "type": "string" }, "queued": { "type": "integer" }, "mentorIds": { "type": "array", "items": { "type": "string", "format": "uuid" } }, "weekStart": { "type": "string", "format": "date-time" }, "weekEnd": { "type": "string", "format": "date-time" } } } } } } } },
+          "400": { "description": "Invalid date range (missing pair, reversed, >31 days, or unparseable dates)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "403": { "description": "Insufficient permissions", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/api/weekly-reports/schedule": {
+      "get": {
+        "summary": "Get weekly report schedule configuration",
+        "description": "Returns the current schedule settings (day, hour, timezone, cron expression, enabled flag).",
+        "tags": ["Weekly Reports"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Schedule config", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": { "enabled": { "type": "boolean" }, "dayOfWeek": { "type": "integer", "minimum": 0, "maximum": 6 }, "hour": { "type": "integer", "minimum": 0, "maximum": 23 }, "timezone": { "type": "string" }, "cronExpression": { "type": "string" } } } } } } } }
+        }
+      }
     }
   }
 }

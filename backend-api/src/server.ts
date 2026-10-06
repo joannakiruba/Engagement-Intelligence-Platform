@@ -26,6 +26,7 @@ import engagementRoutes from './routes/engagement.routes';
 import leaderboardRoutes from './routes/leaderboard.routes';
 import interventionRoutes from './routes/interventions.routes';
 import notificationRoutes from './routes/notifications.routes';
+import weeklyReportRoutes from './routes/weekly-report.routes';
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.use('/api/engagement', authenticateJwt, engagementRoutes);
 app.use('/api/leaderboard', authenticateJwt, leaderboardRoutes);
 app.use('/api/interventions', authenticateJwt, interventionRoutes);
 app.use('/api/notifications', authenticateJwt, notificationRoutes);
+app.use('/api/weekly-reports', authenticateJwt, weeklyReportRoutes);
 
 app.use(errorHandler);
 
@@ -71,14 +73,29 @@ if (require.main === module) {
   });
 
   // Start BullMQ workers in background — non-blocking, server works without Redis
-  Promise.all([
+  const workerNames = ['email', 'alert', 'weekly-report', 'overdue-check'];
+  Promise.allSettled([
     import('./jobs/email.job.js'),
     import('./jobs/alert.job.js'),
-    import('./jobs/weekly-report.job.js'),
+    import('./jobs/weekly-report.job.js').then((mod) => mod.initWeeklyReportSchedule()),
     import('./jobs/overdue-check.job.js').then((m) => m.startOverdueSchedule()),
-  ])
-    .then(() => logger.info('BullMQ workers initialized'))
-    .catch((err) => logger.warn('BullMQ workers failed to start (Redis may be unavailable)', { error: (err as Error).message }));
+  ]).then((results) => {
+    const failures = results
+      .map((r, i) => (r.status === 'rejected' ? { name: workerNames[i], error: r.reason as Error } : null))
+      .filter(Boolean) as { name: string; error: Error }[];
+
+    if (failures.length === 0) {
+      logger.info('BullMQ workers initialized');
+    } else {
+      for (const f of failures) {
+        logger.error(`BullMQ worker "${f.name}" failed to start`, { error: f.error.message });
+      }
+      if (failures.length < workerNames.length) {
+        const started = workerNames.filter((_, i) => results[i].status === 'fulfilled');
+        logger.info('BullMQ workers partially initialized', { started, failed: failures.map(f => f.name) });
+      }
+    }
+  });
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {

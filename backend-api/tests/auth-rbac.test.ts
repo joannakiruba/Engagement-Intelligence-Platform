@@ -721,7 +721,7 @@ describe('Seed Configuration', () => {
 
   test('unique permission codes count', () => {
     const uniqueCodes = new Set(PERMISSIONS.map((p) => p.code));
-    expect(uniqueCodes.size).toBe(82);
+    expect(uniqueCodes.size).toBe(85);
   });
 
   test('no duplicate permission codes', () => {

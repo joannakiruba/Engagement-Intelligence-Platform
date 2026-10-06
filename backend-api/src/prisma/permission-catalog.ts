@@ -121,6 +121,11 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'risk_scores:calculate:batch', description: 'Trigger risk calculation for students in own batch' },
   { code: 'risk_scores:calculate:any', description: 'Trigger risk calculation for any student/batch' },
 
+  // ---- Weekly Reports ----
+  { code: 'weekly_reports:read:assigned', description: "Preview one's own weekly risk report (mentor sees their assigned students)" },
+  { code: 'weekly_reports:read:any', description: 'Preview any mentor\'s weekly risk report' },
+  { code: 'weekly_reports:trigger', description: 'Manually trigger weekly report generation for all mentors' },
+
   // ---- Interventions ----
   { code: 'interventions:create:assigned', description: "Create an intervention for one's assigned students" },
   { code: 'interventions:update:own', description: 'Update/progress an intervention one created' },
@@ -231,6 +236,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'feedback:read:any',
     'mentor_assignments:read:any',
     'risk_scores:read:any',
+    'weekly_reports:read:any',
     'interventions:read:any',
     'notifications:read:own',
     'notifications:update:own',
@@ -249,6 +255,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'feedback:read:assigned',
     'mentor_assignments:read:own',
     'risk_scores:read:assigned',
+    'weekly_reports:read:assigned',
     'interventions:create:assigned',
     'interventions:update:own',
     'interventions:log_outcome:own',
@@ -276,6 +283,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'attendance:export',
     'assessments:read:any',
     'risk_scores:read:any', // placement-readiness tracking
+    'weekly_reports:read:any',
     'notifications:read:own',
     'notifications:update:own',
     'events:create',
@@ -316,6 +324,8 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'mentor_assignments:read:any',
     'risk_scores:read:any',
     'risk_scores:calculate:any',
+    'weekly_reports:read:any',
+    'weekly_reports:trigger',
     'interventions:read:any',
     'notifications:read:own',
     'notifications:update:own',

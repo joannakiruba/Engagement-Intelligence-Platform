@@ -133,9 +133,10 @@ export async function queueMentorAlert(data: MentorAlertJob): Promise<void> {
 }
 
 export async function queueWeeklyReport(data: WeeklyReportJob): Promise<void> {
-  const weekKey = `${data.weekStart.toISOString()}-${data.weekEnd.toISOString()}`;
+  const startKey = data.weekStart.toISOString().replace(/[:.]/g, '-');
+  const endKey = data.weekEnd.toISOString().replace(/[:.]/g, '-');
   await weeklyReportQueue.add('weekly-report', data, {
-    jobId: `weekly-report-${data.mentorId}-${weekKey}`,
+    jobId: `weekly-report-${data.mentorId}-${startKey}-${endKey}`,
   });
   logger.info('Weekly report queued', { mentorId: data.mentorId });
 }

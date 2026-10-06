@@ -3,11 +3,24 @@ import type { Transporter } from 'nodemailer';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 
+export function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 let transporter: Transporter | null = null;
 
 function createTransporter(): Transporter {
   if (!config.email.smtpHost || !config.email.smtpUser || !config.email.smtpPass) {
-    logger.warn('Email configuration incomplete. Using dummy transporter.');
+    if (config.isProduction) {
+      logger.error('SMTP configuration missing in production — emails will not be delivered');
+      throw new Error('SMTP configuration required in production (SMTP_HOST, SMTP_USER, SMTP_PASS)');
+    }
+    logger.warn('SMTP not configured — using stream capture transport (emails are NOT delivered)');
     return nodemailer.createTransport({
       streamTransport: true,
       newline: 'unix',
@@ -218,6 +231,8 @@ interface WeeklyReportStudent {
   riskLevel: string;
   riskScore: number;
   trend?: string;
+  reasons?: string[];
+  dataAvailability?: { attendance: boolean; assessment: boolean; feedback: boolean } | null;
 }
 
 interface WeeklyReportEmailData {
@@ -232,15 +247,40 @@ export async function sendWeeklyReport(data: WeeklyReportEmailData): Promise<voi
   const { to, mentorName, weekStart, weekEnd, students } = data;
   const formatDate = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-  const studentsHtml = students.map(s => `
-    <tr>
-      <td style="padding: 10px; border-bottom: 1px solid #ddd;">${s.name}</td>
-      <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center; color: ${s.riskLevel === 'HIGH' ? '#dc3545' : s.riskLevel === 'MEDIUM' ? '#ffc107' : '#28a745'}; font-weight: bold;">${s.riskLevel}</td>
-      <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">${s.riskScore.toFixed(2)}</td>
-      <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">${s.trend || 'N/A'}</td>
-    </tr>`).join('');
+  const missingLabel = (da: WeeklyReportStudent['dataAvailability']) => {
+    if (!da) return '';
+    const missing = [
+      !da.attendance && 'attendance',
+      !da.assessment && 'assessment',
+      !da.feedback && 'feedback',
+    ].filter(Boolean);
+    if (missing.length === 0) return '';
+    return `<div style="color:#999;font-size:12px;margin-top:4px;">Missing: ${missing.join(', ')}</div>`;
+  };
 
-  const studentsText = students.map(s => `- ${s.name}: ${s.riskLevel} (${s.riskScore.toFixed(2)}) - ${s.trend || 'N/A'}`).join('\n');
+  const studentsHtml = students.map(s => {
+    const eName = escapeHtml(s.name);
+    const eLevel = escapeHtml(s.riskLevel);
+    const eTrend = escapeHtml(s.trend || 'N/A');
+    const eReasons = (s.reasons || []).map(r => escapeHtml(r)).join('; ') || '—';
+    const levelColor = s.riskLevel === 'HIGH' ? '#dc3545' : s.riskLevel === 'MEDIUM' ? '#ffc107' : '#28a745';
+    return `
+    <tr>
+      <td style="padding: 10px; border-bottom: 1px solid #ddd;">${eName}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center; color: ${levelColor}; font-weight: bold;">${eLevel}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">${s.riskScore.toFixed(2)}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">${eTrend}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 13px;">${eReasons}${missingLabel(s.dataAvailability)}</td>
+    </tr>`;
+  }).join('');
+
+  const studentsText = students.map(s => {
+    const reasons = (s.reasons || []).join('; ');
+    const da = s.dataAvailability;
+    const missing = da ? [!da.attendance && 'attendance', !da.assessment && 'assessment', !da.feedback && 'feedback'].filter(Boolean) : [];
+    const missingStr = missing.length > 0 ? ` [Missing data: ${missing.join(', ')}]` : '';
+    return `- ${s.name}: ${s.riskLevel} (${s.riskScore.toFixed(2)}) - ${s.trend || 'N/A'}${reasons ? `\n  Reasons: ${reasons}` : ''}${missingStr}`;
+  }).join('\n');
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -249,7 +289,7 @@ export async function sendWeeklyReport(data: WeeklyReportEmailData): Promise<voi
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px;">
     <h2 style="color: #2c3e50; margin-top: 0;">Weekly Student Risk Report</h2>
-    <p>Hello ${mentorName},</p>
+    <p>Hello ${escapeHtml(mentorName)},</p>
     <p>Here is your weekly report of at-risk students for the period:</p>
     <p><strong>${formatDate(weekStart)} - ${formatDate(weekEnd)}</strong></p>
     ${students.length > 0 ? `
@@ -260,6 +300,7 @@ export async function sendWeeklyReport(data: WeeklyReportEmailData): Promise<voi
           <th style="padding: 10px; text-align: center; border-bottom: 2px solid #dee2e6;">Risk Level</th>
           <th style="padding: 10px; text-align: center; border-bottom: 2px solid #dee2e6;">Score</th>
           <th style="padding: 10px; text-align: center; border-bottom: 2px solid #dee2e6;">Trend</th>
+          <th style="padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;">Reasons</th>
         </tr>
       </thead>
       <tbody>${studentsHtml}</tbody>

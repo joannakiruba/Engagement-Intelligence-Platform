@@ -57,4 +57,11 @@ export const config = {
     privateKey: (process.env.GOOGLE_DRIVE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
     folderId: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
   },
+
+  weeklyReport: {
+    enabled: process.env.WEEKLY_REPORT_ENABLED !== 'false',
+    dayOfWeek: parseInt(process.env.WEEKLY_REPORT_DAY || '1', 10),
+    hour: parseInt(process.env.WEEKLY_REPORT_HOUR || '9', 10),
+    timezone: process.env.WEEKLY_REPORT_TZ || 'Asia/Kolkata',
+  },
 };
