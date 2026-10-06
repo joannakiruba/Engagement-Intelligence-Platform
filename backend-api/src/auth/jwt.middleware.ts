@@ -5,6 +5,7 @@ import { config } from '../config';
 export interface JwtPayload {
   sub: string;
   roleId: string;
+  permissions: string[];
   exp: number;
 }
 
@@ -38,8 +39,8 @@ export function authenticateJwt(req: Request, res: Response, next: NextFunction)
   }
 }
 
-export function signAccessToken(userId: string, roleId: string): string {
-  const payload = { sub: userId, roleId };
+export function signAccessToken(userId: string, roleId: string, permissions: string[]): string {
+  const payload = { sub: userId, roleId, permissions };
   return jwt.sign(payload, config.jwt.secret, {
     expiresIn: config.jwt.accessExpiry as string | number,
   } as jwt.SignOptions);

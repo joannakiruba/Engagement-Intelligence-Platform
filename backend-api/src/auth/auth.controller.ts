@@ -6,8 +6,17 @@ import { signAccessToken } from './jwt.middleware';
 import { logger } from '../utils/logger';
 import prisma from '../lib/prisma';
 import { hashToken, generateRawToken } from '../utils/token';
+
 async function getQueues() {
   return import('../jobs/queue.js');
+}
+
+async function fetchPermissionCodes(roleId: string): Promise<string[]> {
+  const rolePermissions = await prisma.rolePermission.findMany({
+    where: { roleId },
+    include: { permission: true },
+  });
+  return rolePermissions.map((rp) => rp.permission.code);
 }
 
 const BCRYPT_ROUNDS = 10;
@@ -168,7 +177,8 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   clearLoginAttempts(email);
 
-  const accessToken = signAccessToken(user.id, user.roleId);
+  const permissions = await fetchPermissionCodes(user.roleId);
+  const accessToken = signAccessToken(user.id, user.roleId, permissions);
   await issueRefreshToken(res, user.id);
 
   res.status(200).json({
@@ -239,7 +249,8 @@ export async function refresh(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const accessToken = signAccessToken(existingToken.userId, existingToken.user.roleId);
+    const gracePermissions = await fetchPermissionCodes(existingToken.user.roleId);
+    const accessToken = signAccessToken(existingToken.userId, existingToken.user.roleId, gracePermissions);
     res.status(200).json({ success: true, data: { accessToken } });
     return;
   }
@@ -290,7 +301,8 @@ export async function refresh(req: Request, res: Response): Promise<void> {
     existingToken.familyCreatedAt,
   );
 
-  const accessToken = signAccessToken(existingToken.userId, existingToken.user.roleId);
+  const permissions = await fetchPermissionCodes(existingToken.user.roleId);
+  const accessToken = signAccessToken(existingToken.userId, existingToken.user.roleId, permissions);
   res.status(200).json({ success: true, data: { accessToken } });
 }
 
