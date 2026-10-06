@@ -2,24 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
 
 export function requirePermission(...requiredCodes: string[]) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ success: false, error: 'Authentication required.' });
       return;
     }
 
-    const { roleId } = req.user;
-
-    const matchingPermissions = await prisma.rolePermission.findMany({
-      where: {
-        roleId,
-        permission: { code: { in: requiredCodes } },
-      },
-      include: { permission: true },
-    });
-
-    const heldCodes = new Set(matchingPermissions.map((rp) => rp.permission.code));
-
+    const heldCodes = new Set(req.user.permissions);
     const hasPermission = requiredCodes.some((code) => heldCodes.has(code));
 
     if (!hasPermission) {
