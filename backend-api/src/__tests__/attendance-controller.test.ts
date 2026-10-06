@@ -23,6 +23,15 @@ jest.mock('../services/attendance.service', () => ({
   getExcusedRecords: jest.fn(),
 }));
 
+jest.mock('../services/network-verification.service', () => ({
+  extractClientIp: jest.fn().mockReturnValue('203.0.113.10'),
+  getFlags: jest.fn(),
+  resolveFlag: jest.fn(),
+  getFlagStats: jest.fn(),
+  getDeviceCookieName: jest.fn().mockReturnValue('eip_device_token'),
+  getDeviceCookieMaxAge: jest.fn().mockReturnValue(365 * 24 * 60 * 60 * 1000),
+}));
+
 import {
   checkInHandler,
   markAttendanceHandler,
@@ -37,6 +46,9 @@ import {
   createWindowHandler,
   getExcusedRecordsHandler,
   getSessionWindowsHandler,
+  getFlagsHandler,
+  resolveFlagHandler,
+  getFlagStatsHandler,
 } from '../controllers/attendance.controller';
 
 import {
@@ -56,6 +68,13 @@ import {
   getExcusedRecords,
 } from '../services/attendance.service';
 
+import {
+  extractClientIp,
+  getFlags,
+  resolveFlag,
+  getFlagStats,
+} from '../services/network-verification.service';
+
 const UUID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const UUID2 = 'b1ffcd00-0d1c-4ef9-bb7e-7cc0ce491b22';
 
@@ -64,6 +83,10 @@ function mockReq(overrides: Partial<Request> = {}): Request {
     body: {},
     params: {},
     query: {},
+    headers: { 'user-agent': 'TestBrowser/1.0' },
+    cookies: {},
+    ip: '203.0.113.10',
+    socket: { remoteAddress: '203.0.113.10' },
     user: { sub: UUID, roleId: 'role-1' },
     ...overrides,
   } as unknown as Request;
@@ -76,6 +99,7 @@ function mockRes(): Response {
   res.setHeader = jest.fn().mockReturnValue(res);
   res.send = jest.fn().mockReturnValue(res);
   res.end = jest.fn().mockReturnValue(res);
+  res.cookie = jest.fn().mockReturnValue(res);
   return res as Response;
 }
 
@@ -83,18 +107,62 @@ const next: NextFunction = jest.fn();
 
 beforeEach(() => jest.clearAllMocks());
 
+// --- checkInHandler ---
+
 describe('Attendance Controller — checkInHandler', () => {
-  it('calls studentCheckIn with windowId, user sub, and qrToken', async () => {
-    (studentCheckIn as jest.Mock).mockResolvedValue({ id: 'att-1' });
+  it('calls studentCheckIn with network info and device token', async () => {
+    (studentCheckIn as jest.Mock).mockResolvedValue({ id: 'att-1', flagged: false, flags: [] });
     const req = mockReq({ body: { windowId: UUID, qrToken: 'abc12345' } });
     const res = mockRes();
 
     await checkInHandler(req, res, next);
 
-    expect(studentCheckIn).toHaveBeenCalledWith(UUID, UUID, 'abc12345');
+    expect(studentCheckIn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        windowId: UUID,
+        studentId: UUID,
+        qrToken: 'abc12345',
+        networkInfo: expect.objectContaining({ ip: '203.0.113.10' }),
+      })
+    );
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ success: true, data: { id: 'att-1' } })
+      expect.objectContaining({ success: true })
+    );
+  });
+
+  it('sets device cookie when service returns a new token', async () => {
+    (studentCheckIn as jest.Mock).mockResolvedValue({
+      id: 'att-1', flagged: false, flags: [], newDeviceToken: 'new-raw-token',
+    });
+    const req = mockReq({ body: { windowId: UUID, qrToken: 'abc12345' } });
+    const res = mockRes();
+
+    await checkInHandler(req, res, next);
+
+    expect(res.cookie).toHaveBeenCalledWith(
+      'eip_device_token',
+      'new-raw-token',
+      expect.objectContaining({ httpOnly: true, path: '/' })
+    );
+  });
+
+  it('refreshes cookie from existing value when service returns no new token', async () => {
+    (studentCheckIn as jest.Mock).mockResolvedValue({
+      id: 'att-1', flagged: false, flags: [],
+    });
+    const req = mockReq({
+      body: { windowId: UUID, qrToken: 'abc12345' },
+      cookies: { eip_device_token: 'existing-raw' },
+    });
+    const res = mockRes();
+
+    await checkInHandler(req, res, next);
+
+    expect(res.cookie).toHaveBeenCalledWith(
+      'eip_device_token',
+      'existing-raw',
+      expect.objectContaining({ httpOnly: true, path: '/' })
     );
   });
 
@@ -102,7 +170,7 @@ describe('Attendance Controller — checkInHandler', () => {
     (studentCheckIn as jest.Mock).mockRejectedValue(
       new ServiceError('Window closed', 403)
     );
-    const req = mockReq({ body: { windowId: UUID } });
+    const req = mockReq({ body: { windowId: UUID, qrToken: 'token123' } });
     const res = mockRes();
 
     await checkInHandler(req, res, next);
@@ -116,14 +184,35 @@ describe('Attendance Controller — checkInHandler', () => {
   it('passes unexpected errors to next()', async () => {
     const err = new Error('DB down');
     (studentCheckIn as jest.Mock).mockRejectedValue(err);
-    const req = mockReq({ body: { windowId: UUID } });
+    const req = mockReq({ body: { windowId: UUID, qrToken: 'token123' } });
     const res = mockRes();
 
     await checkInHandler(req, res, next);
 
     expect(next).toHaveBeenCalledWith(err);
   });
+
+  it('passes bssid and ssid from body to networkInfo', async () => {
+    (studentCheckIn as jest.Mock).mockResolvedValue({ id: 'att-1', flagged: false, flags: [] });
+    const req = mockReq({
+      body: { windowId: UUID, qrToken: 'abc', bssid: 'AA:BB:CC:DD:EE:FF', ssid: 'CampusWiFi' },
+    });
+    const res = mockRes();
+
+    await checkInHandler(req, res, next);
+
+    expect(studentCheckIn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        networkInfo: expect.objectContaining({
+          bssid: 'AA:BB:CC:DD:EE:FF',
+          ssid: 'CampusWiFi',
+        }),
+      })
+    );
+  });
 });
+
+// --- markAttendanceHandler ---
 
 describe('Attendance Controller — markAttendanceHandler', () => {
   it('calls markAttendance with correct args and returns 201', async () => {
@@ -151,6 +240,8 @@ describe('Attendance Controller — markAttendanceHandler', () => {
     expect(markAttendance).toHaveBeenCalledWith(UUID, UUID2, 'ABSENT', undefined);
   });
 });
+
+// --- bulkMarkHandler ---
 
 describe('Attendance Controller — bulkMarkHandler', () => {
   it('calls bulkMarkAttendance and returns 200', async () => {
@@ -181,6 +272,8 @@ describe('Attendance Controller — bulkMarkHandler', () => {
   });
 });
 
+// --- updateAttendanceHandler ---
+
 describe('Attendance Controller — updateAttendanceHandler', () => {
   it('passes id from params and body to updateAttendance', async () => {
     (updateAttendance as jest.Mock).mockResolvedValue({ id: UUID, status: 'EXCUSED' });
@@ -193,6 +286,8 @@ describe('Attendance Controller — updateAttendanceHandler', () => {
     expect(res.status).toHaveBeenCalledWith(200);
   });
 });
+
+// --- getWindowAttendanceHandler ---
 
 describe('Attendance Controller — getWindowAttendanceHandler', () => {
   it('fetches attendance for a specific window', async () => {
@@ -209,6 +304,8 @@ describe('Attendance Controller — getWindowAttendanceHandler', () => {
   });
 });
 
+// --- getSessionAttendanceHandler ---
+
 describe('Attendance Controller — getSessionAttendanceHandler', () => {
   it('fetches attendance for a session', async () => {
     (getSessionAttendance as jest.Mock).mockResolvedValue([]);
@@ -220,6 +317,8 @@ describe('Attendance Controller — getSessionAttendanceHandler', () => {
     expect(getSessionAttendance).toHaveBeenCalledWith(UUID);
   });
 });
+
+// --- getStudentAttendanceHandler ---
 
 describe('Attendance Controller — getStudentAttendanceHandler', () => {
   it('passes query filters to getStudentAttendance', async () => {
@@ -250,6 +349,8 @@ describe('Attendance Controller — getStudentAttendanceHandler', () => {
   });
 });
 
+// --- getBatchStatsHandler ---
+
 describe('Attendance Controller — getBatchStatsHandler', () => {
   it('fetches batch stats', async () => {
     (getBatchAttendanceStats as jest.Mock).mockResolvedValue({ total: 50, present: 45 });
@@ -261,6 +362,8 @@ describe('Attendance Controller — getBatchStatsHandler', () => {
     expect(getBatchAttendanceStats).toHaveBeenCalledWith(UUID);
   });
 });
+
+// --- exportCsvHandler ---
 
 describe('Attendance Controller — exportCsvHandler', () => {
   it('sets CSV headers and sends content', async () => {
@@ -279,20 +382,25 @@ describe('Attendance Controller — exportCsvHandler', () => {
   });
 });
 
+// --- generateQRHandler ---
+
 describe('Attendance Controller — generateQRHandler', () => {
-  it('returns QR data for a window', async () => {
+  it('returns QR data and passes trainer IP', async () => {
     (generateQRForWindow as jest.Mock).mockResolvedValue({ token: 'abc12345', expiresInSeconds: 30 });
     const req = mockReq({ params: { windowId: UUID } });
     const res = mockRes();
 
     await generateQRHandler(req, res, next);
 
-    expect(generateQRForWindow).toHaveBeenCalledWith(UUID);
+    expect(extractClientIp).toHaveBeenCalledWith(req);
+    expect(generateQRForWindow).toHaveBeenCalledWith(UUID, '203.0.113.10');
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ data: { token: 'abc12345', expiresInSeconds: 30 } })
     );
   });
 });
+
+// --- createWindowHandler ---
 
 describe('Attendance Controller — createWindowHandler', () => {
   it('passes parsed times to createAttendanceWindow', async () => {
@@ -335,6 +443,8 @@ describe('Attendance Controller — createWindowHandler', () => {
   });
 });
 
+// --- getExcusedRecordsHandler ---
+
 describe('Attendance Controller — getExcusedRecordsHandler', () => {
   it('passes filter query params', async () => {
     (getExcusedRecords as jest.Mock).mockResolvedValue([]);
@@ -347,6 +457,8 @@ describe('Attendance Controller — getExcusedRecordsHandler', () => {
   });
 });
 
+// --- getSessionWindowsHandler ---
+
 describe('Attendance Controller — getSessionWindowsHandler', () => {
   it('returns windows for a session', async () => {
     (getSessionWindows as jest.Mock).mockResolvedValue([{ id: 'win-1', label: 'AM' }]);
@@ -358,6 +470,82 @@ describe('Attendance Controller — getSessionWindowsHandler', () => {
     expect(getSessionWindows).toHaveBeenCalledWith(UUID);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ data: [{ id: 'win-1', label: 'AM' }] })
+    );
+  });
+});
+
+// --- Flag management handlers ---
+
+describe('Attendance Controller — getFlagsHandler', () => {
+  it('passes query filters to getFlags', async () => {
+    (getFlags as jest.Mock).mockResolvedValue([]);
+    const req = mockReq({ query: { status: 'PENDING', batchId: UUID } });
+    const res = mockRes();
+
+    await getFlagsHandler(req, res, next);
+
+    expect(getFlags).toHaveBeenCalledWith({ status: 'PENDING', batchId: UUID });
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('passes empty filters when no query params', async () => {
+    (getFlags as jest.Mock).mockResolvedValue([]);
+    const req = mockReq();
+    const res = mockRes();
+
+    await getFlagsHandler(req, res, next);
+
+    expect(getFlags).toHaveBeenCalledWith({});
+  });
+});
+
+describe('Attendance Controller — resolveFlagHandler', () => {
+  it('resolves a flag as CONFIRMED_FRAUD', async () => {
+    (resolveFlag as jest.Mock).mockResolvedValue({ id: 'flag-1', status: 'CONFIRMED_FRAUD' });
+    const req = mockReq({ params: { id: 'flag-1' }, body: { status: 'CONFIRMED_FRAUD' } });
+    const res = mockRes();
+
+    await resolveFlagHandler(req, res, next);
+
+    expect(resolveFlag).toHaveBeenCalledWith('flag-1', 'CONFIRMED_FRAUD', UUID);
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('resolves a flag as DISMISSED', async () => {
+    (resolveFlag as jest.Mock).mockResolvedValue({ id: 'flag-1', status: 'DISMISSED' });
+    const req = mockReq({ params: { id: 'flag-1' }, body: { status: 'DISMISSED' } });
+    const res = mockRes();
+
+    await resolveFlagHandler(req, res, next);
+
+    expect(resolveFlag).toHaveBeenCalledWith('flag-1', 'DISMISSED', UUID);
+  });
+
+  it('returns 404 when flag not found', async () => {
+    (resolveFlag as jest.Mock).mockResolvedValue(null);
+    const req = mockReq({ params: { id: 'missing' }, body: { status: 'DISMISSED' } });
+    const res = mockRes();
+
+    await resolveFlagHandler(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ success: false, error: 'Flag not found' })
+    );
+  });
+});
+
+describe('Attendance Controller — getFlagStatsHandler', () => {
+  it('returns flag stats', async () => {
+    (getFlagStats as jest.Mock).mockResolvedValue({ pending: 3, confirmed: 1, dismissed: 5, total: 9 });
+    const req = mockReq();
+    const res = mockRes();
+
+    await getFlagStatsHandler(req, res, next);
+
+    expect(getFlagStats).toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { pending: 3, confirmed: 1, dismissed: 5, total: 9 } })
     );
   });
 });

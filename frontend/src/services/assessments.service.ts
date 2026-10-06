@@ -1,4 +1,4 @@
-import axios from "axios";
+import api from "./api";
 
 const API = "/api/assessments";
 
@@ -24,27 +24,27 @@ export interface QuestionScore {
 }
 
 export async function getAssessments(params?: { batchId?: string; type?: string }) {
-  const res = await axios.get(API, { params });
+  const res = await api.get(API, { params });
   return res.data;
 }
 
 export async function getAssessment(id: string) {
-  const res = await axios.get(`${API}/${id}`);
+  const res = await api.get(`${API}/${id}`);
   return res.data;
 }
 
 export async function createAssessment(payload: CreateAssessmentPayload) {
-  const res = await axios.post(API, payload);
+  const res = await api.post(API, payload);
   return res.data;
 }
 
 export async function updateAssessment(id: string, payload: Partial<CreateAssessmentPayload>) {
-  const res = await axios.put(`${API}/${id}`, payload);
+  const res = await api.put(`${API}/${id}`, payload);
   return res.data;
 }
 
 export async function deleteAssessment(id: string) {
-  const res = await axios.delete(`${API}/${id}`);
+  const res = await api.delete(`${API}/${id}`);
   return res.data;
 }
 
@@ -52,24 +52,24 @@ export async function submitQuestionScores(
   assessmentId: string,
   data: { studentId: string; questionScores: QuestionScore[]; remarks?: string }
 ) {
-  const res = await axios.post(`${API}/${assessmentId}/scores`, data);
+  const res = await api.post(`${API}/${assessmentId}/scores`, data);
   return res.data;
 }
 
 export async function getResults(assessmentId: string) {
-  const res = await axios.get(`${API}/${assessmentId}/results`);
+  const res = await api.get(`${API}/${assessmentId}/results`);
   return res.data;
 }
 
 export async function getStudentResult(assessmentId: string, studentId: string) {
-  const res = await axios.get(`${API}/${assessmentId}/results/${studentId}`);
+  const res = await api.get(`${API}/${assessmentId}/results/${studentId}`);
   return res.data;
 }
 
 export async function bulkUploadScores(assessmentId: string, file: File) {
   const formData = new FormData();
   formData.append("file", file);
-  const res = await axios.post(`${API}/${assessmentId}/scores/bulk`, formData, {
+  const res = await api.post(`${API}/${assessmentId}/scores/bulk`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
   return res.data;

@@ -4,6 +4,7 @@ import {
   bulkMarkAttendanceSchema,
   updateAttendanceSchema,
   createWindowSchema,
+  resolveFlagSchema,
 } from '../validators/attendance.validator';
 
 function isValid(schema: any, data: any): boolean {
@@ -21,33 +22,39 @@ const VALID_UUID_2 = 'b1ffcd00-0d1c-4ef9-bb7e-7cc0ce491b22';
 
 describe('Attendance Validators', () => {
   describe('checkInSchema', () => {
-    it('should accept valid check-in with windowId only', () => {
-      expect(isValid(checkInSchema, { windowId: VALID_UUID })).toBe(true);
+    it('should reject check-in without qrToken (now required)', () => {
+      expect(isValid(checkInSchema, { windowId: VALID_UUID })).toBe(false);
+      expect(getErrors(checkInSchema, { windowId: VALID_UUID })).toContain('QR token is required');
     });
 
     it('should accept valid check-in with QR token', () => {
       expect(isValid(checkInSchema, { windowId: VALID_UUID, qrToken: 'abc12345' })).toBe(true);
     });
 
+    it('should accept check-in with optional bssid and ssid', () => {
+      expect(isValid(checkInSchema, { windowId: VALID_UUID, qrToken: 'abc12345', bssid: 'AA:BB:CC:DD:EE:FF', ssid: 'CampusWiFi' })).toBe(true);
+    });
+
     it('should reject missing windowId', () => {
-      expect(isValid(checkInSchema, {})).toBe(false);
+      expect(isValid(checkInSchema, { qrToken: 'abc12345' })).toBe(false);
     });
 
     it('should reject invalid windowId', () => {
-      expect(isValid(checkInSchema, { windowId: 'not-a-uuid' })).toBe(false);
-      expect(getErrors(checkInSchema, { windowId: 'not-a-uuid' })).toContain('UUID');
+      expect(isValid(checkInSchema, { windowId: 'not-a-uuid', qrToken: 'abc12345' })).toBe(false);
+      expect(getErrors(checkInSchema, { windowId: 'not-a-uuid', qrToken: 'abc12345' })).toContain('UUID');
     });
 
-    it('should reject empty QR token when provided', () => {
+    it('should reject empty QR token', () => {
       expect(isValid(checkInSchema, { windowId: VALID_UUID, qrToken: '' })).toBe(false);
     });
 
     it('should strip unknown fields', () => {
       const { value } = checkInSchema.validate(
-        { windowId: VALID_UUID, hackField: 'inject' },
+        { windowId: VALID_UUID, qrToken: 'abc12345', hackField: 'inject' },
         { stripUnknown: true }
       );
       expect(value.hackField).toBeUndefined();
+      expect(value.qrToken).toBe('abc12345');
     });
   });
 
@@ -240,6 +247,33 @@ describe('Attendance Validators', () => {
   });
 });
 
+describe('Attendance Validators — resolveFlagSchema', () => {
+  it('should accept CONFIRMED_FRAUD', () => {
+    expect(isValid(resolveFlagSchema, { status: 'CONFIRMED_FRAUD' })).toBe(true);
+  });
+
+  it('should accept DISMISSED', () => {
+    expect(isValid(resolveFlagSchema, { status: 'DISMISSED' })).toBe(true);
+  });
+
+  it('should reject PENDING (cannot set back to pending)', () => {
+    expect(isValid(resolveFlagSchema, { status: 'PENDING' })).toBe(false);
+  });
+
+  it('should reject empty status', () => {
+    expect(isValid(resolveFlagSchema, { status: '' })).toBe(false);
+  });
+
+  it('should reject missing status', () => {
+    expect(isValid(resolveFlagSchema, {})).toBe(false);
+  });
+
+  it('should reject invalid status value', () => {
+    expect(isValid(resolveFlagSchema, { status: 'APPROVED' })).toBe(false);
+    expect(getErrors(resolveFlagSchema, { status: 'APPROVED' })).toContain('CONFIRMED_FRAUD or DISMISSED');
+  });
+});
+
 // --- Service logic tests (QR) ---
 
 import { generateQRToken } from '../services/attendance.service';
@@ -322,7 +356,7 @@ describe('Attendance Service — Window-based Cutoff', () => {
 describe('Attendance Validators — Edge Cases', () => {
   describe('checkInSchema — injection and boundary attacks', () => {
     it('should reject SQL injection in windowId', () => {
-      expect(isValid(checkInSchema, { windowId: "'; DROP TABLE attendance;--" })).toBe(false);
+      expect(isValid(checkInSchema, { windowId: "'; DROP TABLE attendance;--", qrToken: 'abc' })).toBe(false);
     });
 
     it('should reject XSS script in qrToken', () => {
@@ -331,23 +365,23 @@ describe('Attendance Validators — Edge Cases', () => {
     });
 
     it('should reject null windowId', () => {
-      expect(isValid(checkInSchema, { windowId: null })).toBe(false);
+      expect(isValid(checkInSchema, { windowId: null, qrToken: 'abc' })).toBe(false);
     });
 
     it('should reject numeric windowId', () => {
-      expect(isValid(checkInSchema, { windowId: 12345 })).toBe(false);
+      expect(isValid(checkInSchema, { windowId: 12345, qrToken: 'abc' })).toBe(false);
     });
 
     it('should reject array as windowId', () => {
-      expect(isValid(checkInSchema, { windowId: [VALID_UUID] })).toBe(false);
+      expect(isValid(checkInSchema, { windowId: [VALID_UUID], qrToken: 'abc' })).toBe(false);
     });
 
     it('should reject object as windowId', () => {
-      expect(isValid(checkInSchema, { windowId: { id: VALID_UUID } })).toBe(false);
+      expect(isValid(checkInSchema, { windowId: { id: VALID_UUID }, qrToken: 'abc' })).toBe(false);
     });
 
     it('should reject UUID-like string with wrong format', () => {
-      expect(isValid(checkInSchema, { windowId: 'a0eebc99-9c0b-4ef8-zz6d-6bb9bd380a11' })).toBe(false);
+      expect(isValid(checkInSchema, { windowId: 'a0eebc99-9c0b-4ef8-zz6d-6bb9bd380a11', qrToken: 'abc' })).toBe(false);
     });
   });
 

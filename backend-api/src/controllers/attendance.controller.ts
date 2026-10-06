@@ -17,6 +17,14 @@ import {
   getSessionWindows,
   getExcusedRecords,
 } from '../services/attendance.service';
+import {
+  extractClientIp,
+  getFlags,
+  resolveFlag,
+  getFlagStats,
+  getDeviceCookieName,
+  getDeviceCookieMaxAge,
+} from '../services/network-verification.service';
 
 function handleServiceError(err: unknown, res: Response, next: NextFunction) {
   if (err instanceof ServiceError) {
@@ -28,7 +36,34 @@ function handleServiceError(err: unknown, res: Response, next: NextFunction) {
 export async function checkInHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const studentId = req.user!.sub;
-    const result = await studentCheckIn(req.body.windowId, studentId, req.body.qrToken);
+    const clientIp = extractClientIp(req);
+    const cookieName = getDeviceCookieName();
+    const deviceTokenRaw: string | undefined = req.cookies?.[cookieName];
+
+    const result = await studentCheckIn({
+      windowId: req.body.windowId,
+      studentId,
+      qrToken: req.body.qrToken,
+      networkInfo: {
+        ip: clientIp,
+        bssid: req.body.bssid,
+        ssid: req.body.ssid,
+      },
+      deviceTokenRaw,
+      userAgent: req.headers['user-agent'],
+    });
+
+    const cookieValue = result.newDeviceToken || deviceTokenRaw;
+    if (cookieValue) {
+      res.cookie(cookieName, cookieValue, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: getDeviceCookieMaxAge(),
+        path: '/',
+      });
+    }
+
     return sendSuccess(res, result, 201);
   } catch (err) {
     return handleServiceError(err, res, next);
@@ -138,7 +173,8 @@ export async function exportExcelHandler(req: Request, res: Response, next: Next
 
 export async function generateQRHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await generateQRForWindow(String(req.params.windowId));
+    const trainerIp = extractClientIp(req);
+    const result = await generateQRForWindow(String(req.params.windowId), trainerIp);
     return sendSuccess(res, result);
   } catch (err) {
     return handleServiceError(err, res, next);
@@ -177,6 +213,42 @@ export async function getExcusedRecordsHandler(req: Request, res: Response, next
 export async function getSessionWindowsHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await getSessionWindows(String(req.params.sessionId));
+    return sendSuccess(res, result);
+  } catch (err) {
+    return handleServiceError(err, res, next);
+  }
+}
+
+// --- Attendance flag management ---
+
+export async function getFlagsHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const filters: { status?: string; batchId?: string; from?: string; to?: string } = {};
+    if (req.query.status) filters.status = String(req.query.status);
+    if (req.query.batchId) filters.batchId = String(req.query.batchId);
+    if (req.query.from) filters.from = String(req.query.from);
+    if (req.query.to) filters.to = String(req.query.to);
+    const result = await getFlags(filters);
+    return sendSuccess(res, result);
+  } catch (err) {
+    return handleServiceError(err, res, next);
+  }
+}
+
+export async function resolveFlagHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const reviewerId = req.user!.sub;
+    const result = await resolveFlag(String(req.params.id), req.body.status, reviewerId);
+    if (!result) return sendError(res, 'Flag not found', 404);
+    return sendSuccess(res, result);
+  } catch (err) {
+    return handleServiceError(err, res, next);
+  }
+}
+
+export async function getFlagStatsHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await getFlagStats();
     return sendSuccess(res, result);
   } catch (err) {
     return handleServiceError(err, res, next);

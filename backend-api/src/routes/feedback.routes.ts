@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { validate } from '../middleware/validate.middleware';
+import { requirePermission } from '../auth/rbac.middleware';
 import {
   createFeedbackSchema,
   bulkCreateFeedbackSchema,
@@ -16,16 +17,16 @@ import {
 
 const router = Router();
 
-router.get('/', listFeedbackHandler);
+router.get('/', requirePermission('feedback:read:own_received', 'feedback:read:own_given', 'feedback:read:assigned', 'feedback:read:any'), listFeedbackHandler);
 
-router.get('/:id', getFeedbackHandler);
+router.get('/:id', requirePermission('feedback:read:own_received', 'feedback:read:own_given', 'feedback:read:assigned', 'feedback:read:any'), getFeedbackHandler);
 
-router.post('/', validate(createFeedbackSchema), createFeedbackHandler);
+router.post('/', requirePermission('feedback:create:batch'), validate(createFeedbackSchema), createFeedbackHandler);
 
-router.post('/bulk', validate(bulkCreateFeedbackSchema), bulkCreateFeedbackHandler);
+router.post('/bulk', requirePermission('feedback:create:batch'), validate(bulkCreateFeedbackSchema), bulkCreateFeedbackHandler);
 
-router.put('/:id', validate(updateFeedbackSchema), updateFeedbackHandler);
+router.put('/:id', requirePermission('feedback:create:batch'), validate(updateFeedbackSchema), updateFeedbackHandler);
 
-router.delete('/:id', deleteFeedbackHandler);
+router.delete('/:id', requirePermission('feedback:create:batch'), deleteFeedbackHandler);
 
 export default router;

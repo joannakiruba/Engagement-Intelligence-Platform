@@ -1,8 +1,15 @@
 import crypto from 'crypto';
 import prisma from '../lib/prisma';
 import redis from '../lib/redis';
-import { AttendanceStatus } from '@prisma/client';
+import { AttendanceStatus, FlagReason } from '@prisma/client';
 import ExcelJS from 'exceljs';
+import {
+  NetworkInfo,
+  getNetworkFingerprint,
+  verifyNetworkMatch,
+  resolveDeviceToken,
+  createAttendanceFlag,
+} from './network-verification.service';
 
 class ServiceError extends Error {
   constructor(
@@ -174,24 +181,41 @@ export async function getSessionWindows(sessionId: string) {
 
 // --- Student self-check-in (thundering herd protected) ---
 
-export async function studentCheckIn(
-  windowId: string,
-  studentId: string,
-  qrToken?: string
-) {
+export interface CheckInOptions {
+  windowId: string;
+  studentId: string;
+  qrToken: string;
+  networkInfo: NetworkInfo;
+  deviceTokenRaw?: string;
+  userAgent?: string;
+}
+
+export async function studentCheckIn(opts: CheckInOptions) {
+  const { windowId, studentId, qrToken, networkInfo, deviceTokenRaw, userAgent } = opts;
+
   // Gate 1: Redis fast-path — if already checked in, skip all DB queries
   if (await isAlreadyCheckedIn(windowId, studentId)) {
     throw new ServiceError('Attendance already recorded for this window', 409);
   }
 
-  // Gate 2: QR token validation — pure CPU, no DB
-  if (qrToken && !validateQRToken(windowId, qrToken)) {
+  // Gate 2: QR token validation — required
+  if (!validateQRToken(windowId, qrToken)) {
     throw new ServiceError('Invalid or expired QR code', 400);
   }
 
-  // Gate 3: Window time check — try Redis cache first, fall back to DB
+  // Gate 3: Device token — resolve and check for conflicts
+  const device = await resolveDeviceToken(deviceTokenRaw, studentId, userAgent);
+  if (device.flags.includes('DEVICE_CONFLICT')) {
+    throw new ServiceError(
+      'This device is registered to another student. Use your own device to check in.',
+      403
+    );
+  }
+
+  // Gate 4: Window time check — try Redis cache first, fall back to DB
   const now = new Date();
   let windowSessionId: string;
+  let trainerFingerprint: string | null = null;
 
   const cached = await getCachedWindowMeta(windowId);
   if (cached) {
@@ -203,15 +227,21 @@ export async function studentCheckIn(
     }
     windowSessionId = cached.sessionId;
 
-    // Gate 4: Batch membership — try Redis cache first
+    // Gate 5: Batch membership — try Redis cache first
     const cachedMember = await isCachedBatchMember(cached.batchId, studentId);
     if (cachedMember === false) {
       throw new ServiceError('Student is not enrolled in this batch', 403);
     }
 
-    // If cachedMember is true, skip DB. If null (no cache), fall through to DB check below.
     if (cachedMember === true) {
-      return await writeCheckIn(windowId, windowSessionId, studentId, now);
+      // Fetch trainer fingerprint from DB for network check
+      const win = await prisma.attendanceWindow.findUnique({
+        where: { id: windowId },
+        select: { trainerIp: true, networkFingerprint: true },
+      });
+      trainerFingerprint = win?.networkFingerprint || win?.trainerIp || null;
+
+      return await writeCheckInVerified(windowId, windowSessionId, studentId, now, networkInfo, device, trainerFingerprint);
     }
   }
 
@@ -241,10 +271,67 @@ export async function studentCheckIn(
     );
   }
 
-  return await writeCheckIn(windowId, window.sessionId, studentId, now);
+  trainerFingerprint = window.networkFingerprint || window.trainerIp || null;
+
+  return await writeCheckInVerified(windowId, window.sessionId, studentId, now, networkInfo, device, trainerFingerprint);
 }
 
-async function writeCheckIn(windowId: string, sessionId: string, studentId: string, now: Date) {
+// Re-export the type so the controller can see `newDeviceToken` on the result
+export type CheckInResult = Awaited<ReturnType<typeof writeCheckInVerified>>;
+
+async function writeCheckInVerified(
+  windowId: string,
+  sessionId: string,
+  studentId: string,
+  now: Date,
+  networkInfo: NetworkInfo,
+  device: { deviceTokenId: string; flags: FlagReason[]; newRawToken?: string },
+  trainerFingerprint: string | null
+) {
+  const studentFingerprint = getNetworkFingerprint(networkInfo);
+  const networkMatch = verifyNetworkMatch(trainerFingerprint, studentFingerprint);
+
+  const attendance = await writeCheckIn(windowId, sessionId, studentId, now, {
+    studentIp: networkInfo.ip,
+    networkFingerprint: studentFingerprint,
+    deviceTokenId: device.deviceTokenId,
+  });
+
+  const flags: { reason: FlagReason; details: string }[] = [];
+
+  if (!networkMatch) {
+    flags.push({
+      reason: 'IP_MISMATCH',
+      details: `Trainer network: ${trainerFingerprint}, Student network: ${studentFingerprint}`,
+    });
+  }
+
+  for (const reason of device.flags) {
+    flags.push({
+      reason,
+      details: reason === 'DEVICE_RESET' ? 'Device token was missing or unrecognized' : 'Device registered to another student',
+    });
+  }
+
+  for (const flag of flags) {
+    await createAttendanceFlag(attendance.id, studentId, flag.reason, flag.details);
+  }
+
+  return {
+    ...attendance,
+    flagged: flags.length > 0,
+    flags: flags.map((f) => f.reason),
+    newDeviceToken: device.newRawToken,
+  };
+}
+
+async function writeCheckIn(
+  windowId: string,
+  sessionId: string,
+  studentId: string,
+  now: Date,
+  extra?: { studentIp?: string; networkFingerprint?: string; deviceTokenId?: string }
+) {
   const existing = await prisma.attendance.findUnique({
     where: { windowId_studentId: { windowId, studentId } },
   });
@@ -256,10 +343,16 @@ async function writeCheckIn(windowId: string, sessionId: string, studentId: stri
 
   await cacheCheckIn(windowId, studentId);
 
+  const extraData = {
+    studentIp: extra?.studentIp,
+    networkFingerprint: extra?.networkFingerprint,
+    deviceTokenId: extra?.deviceTokenId,
+  };
+
   if (existing) {
     return prisma.attendance.update({
       where: { id: existing.id },
-      data: { status: 'PRESENT', checkInTime: now },
+      data: { status: 'PRESENT', checkInTime: now, ...extraData },
       include: {
         student: { select: { id: true, name: true, email: true } },
         session: { select: { id: true, title: true } },
@@ -274,6 +367,7 @@ async function writeCheckIn(windowId: string, sessionId: string, studentId: stri
       studentId,
       status: 'PRESENT',
       checkInTime: now,
+      ...extraData,
     },
     include: {
       student: { select: { id: true, name: true, email: true } },
@@ -738,12 +832,20 @@ export async function exportBatchAttendanceExcel(
 
 // --- Generate QR data for a window ---
 
-export async function generateQRForWindow(windowId: string) {
+export async function generateQRForWindow(windowId: string, trainerIp?: string) {
   const window = await prisma.attendanceWindow.findUnique({
     where: { id: windowId },
     include: { session: true },
   });
   if (!window) throw new ServiceError('Attendance window not found', 404);
+
+  // Store trainer's network fingerprint on first QR generation
+  if (trainerIp && !window.trainerIp) {
+    await prisma.attendanceWindow.update({
+      where: { id: windowId },
+      data: { trainerIp, networkFingerprint: trainerIp },
+    });
+  }
 
   const { token, expiresInSeconds } = generateQRToken(windowId);
 
