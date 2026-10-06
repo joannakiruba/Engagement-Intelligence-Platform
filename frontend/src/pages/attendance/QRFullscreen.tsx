@@ -31,11 +31,12 @@ export function QRFullscreen() {
     try {
       const res: any = await getWindowQR(idToUse);
       const data = res?.data ?? res;
+      if (!data?.token) throw new Error('No QR token received');
       setQrData(data);
       setCountdown(data.expiresInSeconds || data.refreshIntervalSeconds || 60);
       setError('');
-    } catch {
-      setError('Failed to generate QR code');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to generate QR code');
     }
   }
 

@@ -167,8 +167,13 @@ export function MarkAttendance() {
             </Link>
           )}
           {selectedWindowId && (
-            <Link to={`/attendance/qr-fullscreen/${selectedWindowId}`} className="px-3 py-1 text-sm bg-gray-100 border rounded hover:bg-gray-200">
-              Show QR
+            <Link
+              to={`/attendance/qr/${selectedWindowId}`}
+              target="_blank"
+              className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold shadow-xs flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              Display QR Code
             </Link>
           )}
         </div>
