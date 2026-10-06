@@ -65,7 +65,7 @@ describe('Permission Catalog Integrity', () => {
     const adminPerms = ROLE_PERMISSIONS.ADMIN;
     const required = [
       'users:create', 'users:change_role', 'users:activate', 'users:recover_account',
-      'batches:create', 'batches:update:any', 'events:create', 'events:update:any',
+      'batches:create', 'batches:update:any', 'events:create:any', 'events:update:any',
       'mentor_assignments:create',
     ];
     for (const perm of required) {
@@ -73,12 +73,11 @@ describe('Permission Catalog Integrity', () => {
     }
   });
 
-  test('STUDENT has only :self, :own, and events:read:any scopes', () => {
+  test('STUDENT has only :self and :own scoped permissions', () => {
     const studentPerms = ROLE_PERMISSIONS.STUDENT;
     for (const perm of studentPerms) {
       const hasSelfOrOwn = perm.includes(':self') || perm.includes(':own');
-      const isEventsRead = perm === 'events:read:any';
-      expect(hasSelfOrOwn || isEventsRead).toBe(true);
+      expect(hasSelfOrOwn).toBe(true);
     }
   });
 });
@@ -510,7 +509,7 @@ describe('Scope Enforcement Rules', () => {
   test('Student accessing another student record should be denied', () => {
     const studentPerms = ROLE_PERMISSIONS.STUDENT;
     const hasAnyBroadScope = studentPerms.some(
-      (p) => p.includes(':any') && p !== 'events:read:any',
+      (p) => p.includes(':any'),
     );
     expect(hasAnyBroadScope).toBe(false);
   });
@@ -718,9 +717,9 @@ describe('Seed Configuration', () => {
     expect(ROLES).toContain('ADMIN');
   });
 
-  test('67 unique permission codes', () => {
+  test('73 unique permission codes', () => {
     const uniqueCodes = new Set(PERMISSIONS.map((p) => p.code));
-    expect(uniqueCodes.size).toBe(69);
+    expect(uniqueCodes.size).toBe(73);
   });
 
   test('no duplicate permission codes', () => {

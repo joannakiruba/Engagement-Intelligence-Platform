@@ -99,13 +99,6 @@ export const PERMISSIONS: PermissionDef[] = [
   {
     code: 'mentor_assignments:read:own',
     description: "Read one's own mentor/mentee assignment",
-    // RESOLVED (was flagged for inconsistent granularity vs. feedback:read's
-    // own_given/own_received split): kept as one code. Unlike feedback,
-    // where Trainer and Student need genuinely different permission grants,
-    // here the two directions (Student's own mentor / Mentor's own
-    // mentees) are already fully separated by which role holds the code —
-    // a split would add two code strings for zero additional access-control
-    // benefit.
   },
   { code: 'mentor_assignments:read:any', description: 'Read any mentor assignment' },
 
@@ -132,13 +125,23 @@ export const PERMISSIONS: PermissionDef[] = [
   // ---- Notifications ----
   { code: 'notifications:read:own', description: "Read one's own notifications" },
 
-  // ---- Events & Proofs ----
-  { code: 'events:create', description: 'Create events' },
+  // ---- Events (Ticket 19) ----
+  // 10 new codes replacing 6 old ones (events:create, events:update:any,
+  // events:read:any, event_registrations:create:self,
+  // event_registrations:read:own, event_registrations:read:any).
+  // Net change: +4 codes (69 old → 73 new, after removing 6 old and adding 10 new).
+  { code: 'events:create:batch', description: 'Create events for own batches' },
+  { code: 'events:create:any', description: 'Create events for any batch' },
+  { code: 'events:read:own', description: "Read events for one's own batches (student)" },
+  { code: 'events:read:batch', description: "Read events for trainer's batches" },
+  { code: 'events:read:any', description: 'Read any event' },
+  { code: 'events:update:own', description: 'Update own event registrations (student)' },
+  { code: 'events:update:batch', description: 'Update events for own batches' },
   { code: 'events:update:any', description: 'Update any event' },
-  { code: 'events:read:any', description: 'Browse events (all roles)' },
-  { code: 'event_registrations:create:self', description: 'Register oneself for an event' },
-  { code: 'event_registrations:read:own', description: "Read one's own event registrations" },
-  { code: 'event_registrations:read:any', description: 'Read any event registration' },
+  { code: 'events:delete:batch', description: 'Delete events for own batches' },
+  { code: 'events:delete:any', description: 'Delete any event' },
+
+  // ---- Proofs ----
   { code: 'proofs:submit:self', description: 'Submit proof/certification for oneself' },
   { code: 'proofs:read:own', description: "Read one's own proof submissions" },
   { code: 'proofs:read:batch', description: "Read proof submissions for one's own batch" },
@@ -164,9 +167,8 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'risk_scores:read:own',
     'interventions:read:own',
     'notifications:read:own',
-    'events:read:any',
-    'event_registrations:create:self',
-    'event_registrations:read:own',
+    'events:read:own',
+    'events:update:own',
     'proofs:submit:self',
     'proofs:read:own',
   ],
@@ -187,17 +189,13 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'assessments:update:batch',
     'feedback:create:batch',
     'feedback:read:own_given',
-    // Category-only, not full risk_scores:read:batch (which doesn't exist
-    // as a code): a full score/factors breakdown is partly derived from
-    // OTHER trainers' feedback risk contributions, which this trainer has
-    // no independent permission to read — exposing the synthesized score
-    // would leak that signal sideways. It also keeps risk-triage as a
-    // single owned pipeline (Mentor), avoiding two people independently
-    // acting on the same flagged student.
     'risk_scores:read:category:batch',
     'risk_scores:calculate:batch',
     'notifications:read:own',
-    'events:read:any',
+    'events:create:batch',
+    'events:read:batch',
+    'events:update:batch',
+    'events:delete:batch',
     'proofs:read:batch',
     'proofs:approve:batch',
   ],
@@ -236,43 +234,27 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'interventions:read:assigned',
     'notifications:read:own',
     'events:read:any',
-    // Deliberately no proofs:* or event_registrations:* — not an input to
-    // the risk engine today (README Module 12 rules: attendance /
-    // assessments / feedback only). Revisit only if event/hackathon
-    // disengagement becomes a modeled risk factor.
   ],
 
   COORDINATOR: [
     'users:read:own',
     'users:update:self',
-    // Added: Coordinator approves proofs and reviews event registrations
-    // for students across batches/departments they don't personally know —
-    // needs to identify who a record belongs to. Read-only directory
-    // access, same tier Faculty already holds.
     'users:read:any',
     'batches:read:any',
     'sessions:read:any',
     'attendance:read:any',
     'attendance:export',
     'assessments:read:any',
-    'risk_scores:read:any', // placement-readiness tracking
+    'risk_scores:read:any',
     'notifications:read:own',
-    'events:create',
-    'events:update:any',
+    'events:create:any',
     'events:read:any',
-    'event_registrations:read:any',
+    'events:update:any',
     'proofs:read:any',
     'proofs:approve:any',
   ],
 
   ADMIN: [
-    // Every :any permission (read AND update), plus the account-lifecycle
-    // permissions unique to this role and mentor_assignments:create.
-    // Deliberately does NOT hold: session/assessment/feedback creation
-    // (stays Trainer-owned — Admin can correct via assessments:update:any
-    // and attendance:update:any, but doesn't do routine data entry) or
-    // intervention create/update/log_outcome (stays Mentor-owned — Admin
-    // gets interventions:read:any for oversight, not operation).
     'users:create',
     'users:read:own',
     'users:update:self',
@@ -297,10 +279,10 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'risk_scores:calculate:any',
     'interventions:read:any',
     'notifications:read:own',
-    'events:create',
-    'events:update:any',
+    'events:create:any',
     'events:read:any',
-    'event_registrations:read:any',
+    'events:update:any',
+    'events:delete:any',
     'proofs:read:any',
     'proofs:approve:any',
     'audit_logs:read',

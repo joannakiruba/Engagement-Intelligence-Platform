@@ -20,6 +20,9 @@ import ExcusedReview from "./pages/attendance/ExcusedReview";
 import FeedbackList from "./pages/feedback/FeedbackList";
 import FeedbackForm from "./pages/feedback/FeedbackForm";
 import FeedbackDetail from "./pages/feedback/FeedbackDetail";
+import EventList from "./pages/events/EventList";
+import EventDetail from "./pages/events/EventDetail";
+import EventForm from "./pages/events/EventForm";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -50,6 +53,9 @@ function AppNav() {
         </Link>
         <Link to="/feedback" className="text-gray-600 hover:text-gray-900">
           Feedback
+        </Link>
+        <Link to="/events" className="text-gray-600 hover:text-gray-900">
+          Events
         </Link>
         {user && (
           <>
@@ -113,6 +119,10 @@ function AppRoutes() {
           <Route path="/feedback/create" element={<FeedbackForm />} />
           <Route path="/feedback/:id/edit" element={<FeedbackForm />} />
           <Route path="/feedback/:id" element={<FeedbackDetail />} />
+          <Route path="/events" element={<EventList />} />
+          <Route path="/events/create" element={<EventForm />} />
+          <Route path="/events/:id/edit" element={<EventForm />} />
+          <Route path="/events/:id" element={<EventDetail />} />
         </Routes>
       </main>
     </div>
