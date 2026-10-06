@@ -1,11 +1,13 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { validate } from '../middleware/validate.middleware';
+import { requirePermission } from '../auth/rbac.middleware';
 import { sendSuccess, sendError } from '../utils/response';
 import {
   generateMentorAlerts, getMentorAlerts, getStudentAlerts,
   updateAlertStatus, recordAlertOutcome, getAlertStats,
 } from '../services/ml.service';
+import prisma from '../lib/prisma';
 
 const router = Router();
 
@@ -19,40 +21,131 @@ const outcomeSchema = Joi.object({
   outcome_notes: Joi.string().max(1000).optional(),
 });
 
-router.post('/generate', validate(generateSchema), async (req: Request, res: Response): Promise<void> => {
-  try { const result = await generateMentorAlerts(req.body.batchId); sendSuccess(res, result, 201); }
-  catch (err) { sendError(res, 'Failed to generate mentor alerts. ML service may be unavailable.', 503); }
-});
+async function verifyMentorOwnsAlert(alertId: number, mentorId: string) {
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: number; mentor_id: string }>>(
+    `SELECT id, mentor_id FROM ml_mentor_alerts WHERE id = $1`,
+    alertId,
+  );
+  if (!rows.length) return false;
+  return rows[0].mentor_id === mentorId;
+}
 
-router.get('/mentor/:mentorId', async (req: Request, res: Response): Promise<void> => {
-  try { const mentorId = Array.isArray(req.params.mentorId) ? req.params.mentorId[0] : req.params.mentorId;
-    const alerts = await getMentorAlerts(mentorId); sendSuccess(res, alerts); }
-  catch (err) { sendError(res, 'Failed to fetch mentor alerts.', 503); }
-});
+async function verifyMentorAssignment(mentorId: string, studentId: string) {
+  const assignment = await prisma.mentorAssignment.findUnique({
+    where: { mentorId_studentId: { mentorId, studentId } },
+  });
+  return !!assignment;
+}
 
-router.get('/student/:studentId', async (req: Request, res: Response): Promise<void> => {
-  try { const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
-    const alerts = await getStudentAlerts(studentId); sendSuccess(res, alerts); }
-  catch (err) { sendError(res, 'Failed to fetch student alerts.', 503); }
-});
+router.post(
+  '/generate',
+  requirePermission('risk_scores:calculate:any', 'risk_scores:calculate:batch'),
+  validate(generateSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try { const result = await generateMentorAlerts(req.body.batchId); sendSuccess(res, result, 201); }
+    catch (err) { sendError(res, 'Failed to generate mentor alerts. ML service may be unavailable.', 503); }
+  },
+);
 
-router.put('/:alertId/status', validate(updateStatusSchema), async (req: Request, res: Response): Promise<void> => {
-  try { const alertId = parseInt(Array.isArray(req.params.alertId) ? req.params.alertId[0] : req.params.alertId, 10);
-    if (isNaN(alertId)) { sendError(res, 'Invalid alert ID.', 400); return; }
-    const updated = await updateAlertStatus(alertId, req.body.status); sendSuccess(res, updated); }
-  catch (err) { sendError(res, 'Failed to update alert status.', 503); }
-});
+router.get(
+  '/mentor/:mentorId',
+  requirePermission('interventions:read:assigned', 'interventions:read:any'),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const mentorId = Array.isArray(req.params.mentorId) ? req.params.mentorId[0] : req.params.mentorId;
+      const userId = req.user!.sub;
 
-router.post('/:alertId/outcome', validate(outcomeSchema), async (req: Request, res: Response): Promise<void> => {
-  try { const alertId = parseInt(Array.isArray(req.params.alertId) ? req.params.alertId[0] : req.params.alertId, 10);
-    if (isNaN(alertId)) { sendError(res, 'Invalid alert ID.', 400); return; }
-    const result = await recordAlertOutcome(alertId, req.body); sendSuccess(res, result, 201); }
-  catch (err) { sendError(res, 'Failed to record alert outcome.', 503); }
-});
+      const heldPermissions: Set<string> = (req as any).heldPermissions || new Set();
+      const hasReadAny = heldPermissions.has('interventions:read:any');
+      if (!hasReadAny && mentorId !== userId) {
+        sendError(res, 'Access denied.', 403);
+        return;
+      }
 
-router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
-  try { const stats = await getAlertStats(); sendSuccess(res, stats); }
-  catch (err) { sendError(res, 'Failed to fetch alert statistics.', 503); }
-});
+      const alerts = await getMentorAlerts(mentorId);
+      sendSuccess(res, alerts);
+    } catch (err) { sendError(res, 'Failed to fetch mentor alerts.', 503); }
+  },
+);
+
+router.get(
+  '/student/:studentId',
+  requirePermission('interventions:read:own', 'interventions:read:assigned', 'interventions:read:any'),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
+      const userId = req.user!.sub;
+
+      const heldPermissions: Set<string> = (req as any).heldPermissions || new Set();
+      const hasReadAny = heldPermissions.has('interventions:read:any');
+      const hasReadAssigned = heldPermissions.has('interventions:read:assigned');
+
+      if (!hasReadAny) {
+        if (hasReadAssigned) {
+          const isAssigned = await verifyMentorAssignment(userId, studentId);
+          if (!isAssigned) { sendError(res, 'Access denied.', 403); return; }
+        } else if (studentId !== userId) {
+          sendError(res, 'Access denied.', 403);
+          return;
+        }
+      }
+
+      const alerts = await getStudentAlerts(studentId);
+      sendSuccess(res, alerts);
+    } catch (err) { sendError(res, 'Failed to fetch student alerts.', 503); }
+  },
+);
+
+router.put(
+  '/:alertId/status',
+  requirePermission('interventions:create:assigned', 'interventions:read:any'),
+  validate(updateStatusSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const alertId = parseInt(Array.isArray(req.params.alertId) ? req.params.alertId[0] : req.params.alertId, 10);
+      if (isNaN(alertId)) { sendError(res, 'Invalid alert ID.', 400); return; }
+
+      const userId = req.user!.sub;
+      const heldPermissions: Set<string> = (req as any).heldPermissions || new Set();
+      const hasReadAny = heldPermissions.has('interventions:read:any');
+
+      if (!hasReadAny) {
+        const owns = await verifyMentorOwnsAlert(alertId, userId);
+        if (!owns) { sendError(res, 'Alert not found.', 404); return; }
+      }
+
+      const updated = await updateAlertStatus(alertId, req.body.status);
+      sendSuccess(res, updated);
+    } catch (err) { sendError(res, 'Failed to update alert status.', 503); }
+  },
+);
+
+router.post(
+  '/:alertId/outcome',
+  requirePermission('interventions:create:assigned'),
+  validate(outcomeSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const alertId = parseInt(Array.isArray(req.params.alertId) ? req.params.alertId[0] : req.params.alertId, 10);
+      if (isNaN(alertId)) { sendError(res, 'Invalid alert ID.', 400); return; }
+
+      const userId = req.user!.sub;
+      const owns = await verifyMentorOwnsAlert(alertId, userId);
+      if (!owns) { sendError(res, 'Alert not found.', 404); return; }
+
+      const result = await recordAlertOutcome(alertId, req.body);
+      sendSuccess(res, result, 201);
+    } catch (err) { sendError(res, 'Failed to record alert outcome.', 503); }
+  },
+);
+
+router.get(
+  '/stats',
+  requirePermission('interventions:read:any'),
+  async (_req: Request, res: Response): Promise<void> => {
+    try { const stats = await getAlertStats(); sendSuccess(res, stats); }
+    catch (err) { sendError(res, 'Failed to fetch alert statistics.', 503); }
+  },
+);
 
 export default router;

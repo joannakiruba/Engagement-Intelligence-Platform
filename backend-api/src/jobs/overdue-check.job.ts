@@ -27,51 +27,77 @@ export const overdueCheckWorker = new Worker(
   async (_job: Job) => {
     logger.info('Running overdue task check');
 
-    const overdueTasks = await prisma.interventionTask.findMany({
+    const now = new Date();
+    let created = 0;
+    let checked = 0;
+
+    const overdueCandidates = await prisma.interventionTask.findMany({
       where: {
         isCompleted: false,
-        deadline: { lt: new Date() },
+        deadline: { lt: now },
         intervention: {
           status: { in: ['PENDING', 'IN_PROGRESS'] },
         },
       },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        deadline: true,
+        isCompleted: true,
         intervention: {
-          select: { id: true, studentId: true, title: true },
+          select: { id: true, studentId: true, title: true, status: true },
         },
       },
     });
 
-    let created = 0;
-    for (const task of overdueTasks) {
-      const dedupKey = `overdue:task:${task.id}:${task.deadline!.toISOString()}`;
+    for (const candidate of overdueCandidates) {
+      checked++;
+      const dedupKey = `overdue:task:${candidate.id}:${candidate.deadline!.toISOString()}`;
 
       try {
-        await prisma.notification.create({
-          data: {
-            userId: task.intervention.studentId,
-            title: 'Task Overdue',
-            message: `Your task "${task.title}" in intervention "${task.intervention.title}" is past its deadline.`,
-            type: 'TASK_UPDATE',
-            referenceId: task.intervention.id,
-            referenceType: 'intervention',
-            deduplicationKey: dedupKey,
-          },
+        // Re-verify inside a transaction to guard against concurrent completion
+        await prisma.$transaction(async (tx) => {
+          const task = await tx.interventionTask.findUnique({
+            where: { id: candidate.id },
+            select: {
+              isCompleted: true,
+              deadline: true,
+              intervention: { select: { status: true } },
+            },
+          });
+
+          if (!task) return;
+          if (task.isCompleted) return;
+          if (!task.deadline || task.deadline.getTime() !== candidate.deadline!.getTime()) return;
+          if (task.deadline > now) return;
+          if (task.intervention.status !== 'PENDING' && task.intervention.status !== 'IN_PROGRESS') return;
+
+          await tx.notification.create({
+            data: {
+              userId: candidate.intervention.studentId,
+              title: 'Task Overdue',
+              message: `Your task "${candidate.title}" in intervention "${candidate.intervention.title}" is past its deadline.`,
+              type: 'TASK_UPDATE',
+              referenceId: candidate.intervention.id,
+              referenceType: 'intervention',
+              deduplicationKey: dedupKey,
+            },
+          });
+          created++;
         });
-        created++;
       } catch (err: any) {
         if (err.code === 'P2002') {
           continue;
         }
         logger.error('Failed to create overdue notification', {
-          taskId: task.id,
+          taskId: candidate.id,
           error: err.message,
         });
       }
     }
 
-    logger.info(`Overdue check complete: ${overdueTasks.length} overdue tasks found, ${created} new notifications created`);
-    return { overdueTasks: overdueTasks.length, notificationsCreated: created };
+    logger.info(`Overdue check complete: ${checked} overdue tasks checked, ${created} new notifications created`);
+    return { overdueTasks: checked, notificationsCreated: created };
   },
   { connection: redisConnection, concurrency: 1 },
 );

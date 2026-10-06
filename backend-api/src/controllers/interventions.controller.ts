@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import prisma from '../lib/prisma';
 import * as svc from '../services/interventions.service';
+import { ConflictError } from '../services/interventions.service';
 import type { ResolvedScope } from '../auth/rbac.middleware';
 
 function param(req: Request, name: string): string {
@@ -34,10 +35,6 @@ async function verifyAlertCause(alertId: number, causeCode: string) {
     causeCode,
   );
   return rows.length > 0;
-}
-
-function isTerminal(status: string) {
-  return status === 'COMPLETED' || status === 'CANCELLED';
 }
 
 // ── Interventions ──
@@ -92,11 +89,13 @@ export async function create(req: Request, res: Response): Promise<void> {
 export async function list(req: Request, res: Response): Promise<void> {
   const scope: ResolvedScope = (req as any).resolvedScope || 'none';
   const userId = req.user!.sub;
-  const { status, studentId, hasOverdueTasks, page, limit } = req.query as any;
+
+  const query = (req as any).validatedQuery || req.query;
+  const { status, studentId, hasOverdueTasks, page, limit } = query as any;
 
   const opts: svc.ListInterventionsOpts = {
     status: status || undefined,
-    hasOverdueTasks: hasOverdueTasks === 'true',
+    hasOverdueTasks: hasOverdueTasks === 'true' || hasOverdueTasks === true,
     page: parseInt(page) || 1,
     limit: parseInt(limit) || 20,
   };
@@ -144,50 +143,47 @@ export async function getById(req: Request, res: Response): Promise<void> {
 
 export async function update(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
-  const intervention = await svc.getInterventionById(param(req, 'id'));
-  if (!intervention) {
-    sendError(res, 'Intervention not found.', 404);
-    return;
-  }
-  if (intervention.mentorId !== userId) {
-    sendError(res, 'Intervention not found.', 404);
-    return;
-  }
-  if (isTerminal(intervention.status)) {
-    sendError(res, 'Cannot modify a completed or cancelled intervention.', 400);
-    return;
-  }
-
   const { title, description, deadline, status } = req.body;
 
-  if (status === 'CANCELLED' && isTerminal(intervention.status)) {
-    sendError(res, 'Intervention is already terminal.', 400);
-    return;
+  try {
+    const updated = await svc.updateIntervention(param(req, 'id'), userId, {
+      title,
+      description,
+      deadline: deadline !== undefined ? (deadline ? new Date(deadline) : null) : undefined,
+      status,
+    });
+    if (!updated) {
+      sendError(res, 'Intervention not found.', 404);
+      return;
+    }
+    sendSuccess(res, updated);
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      sendError(res, err.message, 409);
+      return;
+    }
+    throw err;
   }
-
-  const updated = await svc.updateIntervention(intervention.id, { title, description, deadline, status });
-  sendSuccess(res, updated);
 }
 
 export async function complete(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
-  const intervention = await svc.getInterventionById(param(req, 'id'));
-  if (!intervention) {
-    sendError(res, 'Intervention not found.', 404);
-    return;
-  }
-  if (intervention.mentorId !== userId) {
-    sendError(res, 'Intervention not found.', 404);
-    return;
-  }
-  if (isTerminal(intervention.status)) {
-    sendError(res, 'Intervention is already terminal.', 400);
-    return;
-  }
-
   const { outcome, remarks } = req.body;
-  const result = await svc.completeIntervention(intervention.id, outcome, remarks);
-  sendSuccess(res, result);
+
+  try {
+    const result = await svc.completeIntervention(param(req, 'id'), userId, outcome, remarks);
+    if (!result) {
+      sendError(res, 'Intervention not found.', 404);
+      return;
+    }
+    sendSuccess(res, result);
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      sendError(res, err.message, 409);
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function editOutcome(req: Request, res: Response): Promise<void> {
@@ -221,114 +217,111 @@ export async function pendingCount(req: Request, res: Response): Promise<void> {
 
 export async function createTask(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
-  const intervention = await svc.getInterventionById(param(req, 'id'));
-  if (!intervention) {
-    sendError(res, 'Intervention not found.', 404);
-    return;
-  }
-  if (intervention.mentorId !== userId) {
-    sendError(res, 'Intervention not found.', 404);
-    return;
-  }
-  if (isTerminal(intervention.status)) {
-    sendError(res, 'Cannot add tasks to a terminal intervention.', 400);
-    return;
-  }
-
   const { title, description, deadline } = req.body;
-  const task = await svc.createTask(intervention.id, {
-    title,
-    description,
-    deadline: deadline ? new Date(deadline) : null,
-  });
-  sendSuccess(res, task, 201);
+
+  try {
+    const task = await svc.createTask(param(req, 'id'), userId, {
+      title,
+      description,
+      deadline: deadline ? new Date(deadline) : null,
+    });
+    if (!task) {
+      sendError(res, 'Intervention not found.', 404);
+      return;
+    }
+    sendSuccess(res, task, 201);
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      sendError(res, err.message, 409);
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function updateTask(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
+  const { title, description, deadline, isCompleted } = req.body;
+
   const task = await svc.getTaskById(param(req, 'taskId'));
-  if (!task) {
+  if (!task || task.intervention.id !== param(req, 'id')) {
     sendError(res, 'Task not found.', 404);
-    return;
-  }
-  if (task.intervention.mentorId !== userId) {
-    sendError(res, 'Task not found.', 404);
-    return;
-  }
-  if (task.intervention.id !== param(req, 'id')) {
-    sendError(res, 'Task not found.', 404);
-    return;
-  }
-  if (isTerminal(task.intervention.status)) {
-    sendError(res, 'Cannot modify tasks on a terminal intervention.', 400);
     return;
   }
 
-  const { title, description, deadline, isCompleted } = req.body;
-  const updated = await svc.updateTask(task.id, { title, description, deadline, isCompleted });
-  sendSuccess(res, updated);
+  try {
+    const updated = await svc.updateTask(task.id, userId, { title, description, deadline, isCompleted });
+    if (!updated) {
+      sendError(res, 'Task not found.', 404);
+      return;
+    }
+    sendSuccess(res, updated);
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      sendError(res, err.message, 409);
+      return;
+    }
+    throw err;
+  }
 }
 
 // ── Notes ──
 
 export async function createNote(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
-  const intervention = await svc.getInterventionById(param(req, 'id'));
-  if (!intervention) {
-    sendError(res, 'Intervention not found.', 404);
-    return;
-  }
-  if (intervention.mentorId !== userId) {
-    sendError(res, 'Intervention not found.', 404);
-    return;
-  }
-  if (isTerminal(intervention.status)) {
-    sendError(res, 'Cannot add notes to a terminal intervention.', 400);
-    return;
-  }
 
-  const note = await svc.createNote(intervention.id, req.body.note);
-  sendSuccess(res, note, 201);
+  try {
+    const note = await svc.createNote(param(req, 'id'), userId, req.body.note);
+    if (!note) {
+      sendError(res, 'Intervention not found.', 404);
+      return;
+    }
+    sendSuccess(res, note, 201);
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      sendError(res, err.message, 409);
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function updateNote(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
-  const existing = await svc.getNoteById(param(req, 'noteId'));
-  if (!existing) {
-    sendError(res, 'Note not found.', 404);
-    return;
-  }
-  if (existing.intervention.mentorId !== userId) {
-    sendError(res, 'Note not found.', 404);
-    return;
-  }
-  if (existing.interventionId !== param(req, 'id')) {
-    sendError(res, 'Note not found.', 404);
-    return;
-  }
 
-  const updated = await svc.updateNote(existing.id, req.body.note);
-  sendSuccess(res, updated);
+  try {
+    const updated = await svc.updateNote(param(req, 'noteId'), userId, req.body.note);
+    if (!updated) {
+      sendError(res, 'Note not found.', 404);
+      return;
+    }
+    sendSuccess(res, updated);
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      sendError(res, err.message, 409);
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function deleteNote(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
-  const existing = await svc.getNoteById(param(req, 'noteId'));
-  if (!existing) {
-    sendError(res, 'Note not found.', 404);
-    return;
-  }
-  if (existing.intervention.mentorId !== userId) {
-    sendError(res, 'Note not found.', 404);
-    return;
-  }
-  if (existing.interventionId !== param(req, 'id')) {
-    sendError(res, 'Note not found.', 404);
-    return;
-  }
 
-  await svc.deleteNote(existing.id);
-  sendSuccess(res, { deleted: true });
+  try {
+    const result = await svc.deleteNote(param(req, 'noteId'), userId);
+    if (!result) {
+      sendError(res, 'Note not found.', 404);
+      return;
+    }
+    sendSuccess(res, { deleted: true });
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      sendError(res, err.message, 409);
+      return;
+    }
+    throw err;
+  }
 }
 
 // ── Alerts with causes ──
@@ -348,12 +341,18 @@ export async function getAlertsForMentor(req: Request, res: Response): Promise<v
              '[]'::json
            ) AS causes,
            COALESCE(
-             (SELECT json_agg(json_build_object(
+             (SELECT json_agg(DISTINCT jsonb_build_object(
                'id', i.id,
                'causeCode', i."causeCode",
                'status', i.status,
                'title', i.title
-             )) FROM interventions i WHERE i."alertId" = a.id),
+             )) FROM ml_alert_causes c2
+             JOIN interventions i
+               ON i."studentId" = a.student_id
+              AND i."causeCode" = c2.cause_code
+              AND i."mentorId" = $1
+              AND i.status IN ('PENDING', 'IN_PROGRESS')
+             WHERE c2.alert_id = a.id),
              '[]'::json
            ) AS interventions
     FROM ml_mentor_alerts a

@@ -19,7 +19,7 @@ const router = Router();
 router.get(
   '/',
   requirePermission('interventions:read:any', 'interventions:read:assigned', 'interventions:read:own'),
-  resolveScope('interventions'),
+  resolveScope('interventions:read'),
   validate(listInterventionsSchema, 'query'),
   ctrl.list,
 );
@@ -39,7 +39,7 @@ router.get(
 router.get(
   '/:id',
   requirePermission('interventions:read:any', 'interventions:read:assigned', 'interventions:read:own'),
-  resolveScope('interventions'),
+  resolveScope('interventions:read'),
   ctrl.getById,
 );
 
