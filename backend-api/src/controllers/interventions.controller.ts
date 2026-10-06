@@ -4,6 +4,7 @@ import prisma from '../lib/prisma';
 import * as svc from '../services/interventions.service';
 import { ConflictError } from '../services/interventions.service';
 import type { ResolvedScope } from '../auth/rbac.middleware';
+import { logger } from '../utils/logger';
 
 function param(req: Request, name: string): string {
   const v = req.params[name];
@@ -83,14 +84,22 @@ export async function create(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Mark the alert as 'acted' now that an intervention was created
+  // Mark the alert as 'acted' with timestamp now that an intervention was created
   try {
     await prisma.$queryRawUnsafe(
-      `UPDATE ml_mentor_alerts SET alert_status = 'acted' WHERE id = $1 AND alert_status != 'acted'`,
+      `UPDATE ml_mentor_alerts SET alert_status = 'acted', acted_at = NOW() WHERE id = $1 AND alert_status != 'acted'`,
       alertId,
     );
-  } catch {
-    // Non-critical: alert status update failure should not block intervention creation
+  } catch (err) {
+    logger.error(`Failed to update alert status to acted for alertId=${alertId}: ${err}`);
+    try {
+      await prisma.$queryRawUnsafe(
+        `UPDATE ml_mentor_alerts SET alert_status = 'acted', acted_at = NOW() WHERE id = $1 AND alert_status != 'acted'`,
+        alertId,
+      );
+    } catch (retryErr) {
+      logger.error(`Retry failed for alert status update alertId=${alertId}: ${retryErr}`);
+    }
   }
 
   sendSuccess(res, { existing: false, intervention: result.intervention }, 201);
@@ -196,16 +205,37 @@ export async function complete(req: Request, res: Response): Promise<void> {
           result.id,
         );
         if (!existingOutcome.length) {
+          const alertRows = await prisma.$queryRawUnsafe<Array<{ created_at: Date }>>(
+            `SELECT created_at FROM ml_mentor_alerts WHERE id = $1`,
+            result.alertId,
+          );
+          const responseTimeHours = alertRows.length
+            ? (Date.now() - new Date(alertRows[0].created_at).getTime()) / 3_600_000
+            : null;
+
+          await prisma.$queryRawUnsafe(
+            `INSERT INTO ml_alert_outcomes (alert_id, mentor_response, intervention_id, was_recommendation_followed, response_time_hours, outcome_notes)
+             VALUES ($1, 'acted', $2, false, $3, $4)`,
+            result.alertId,
+            result.id,
+            responseTimeHours,
+            remarks || null,
+          );
+        }
+      } catch (err) {
+        logger.error(`Failed to record alert outcome on completion alertId=${result.alertId} interventionId=${result.id}: ${err}`);
+        try {
           await prisma.$queryRawUnsafe(
             `INSERT INTO ml_alert_outcomes (alert_id, mentor_response, intervention_id, was_recommendation_followed, outcome_notes)
-             VALUES ($1, 'acted', $2, true, $3)`,
+             VALUES ($1, 'acted', $2, false, $3)
+             ON CONFLICT DO NOTHING`,
             result.alertId,
             result.id,
             remarks || null,
           );
+        } catch (retryErr) {
+          logger.error(`Retry failed for alert outcome recording alertId=${result.alertId}: ${retryErr}`);
         }
-      } catch {
-        // Non-critical: alert outcome recording failure should not block completion response
       }
     }
 
@@ -237,6 +267,21 @@ export async function editOutcome(req: Request, res: Response): Promise<void> {
 
   const { outcome, remarks } = req.body;
   const updated = await svc.editOutcome(intervention.id, outcome, remarks);
+
+  // Keep linked ml_alert_outcomes consistent
+  if (intervention.alertId) {
+    try {
+      await prisma.$queryRawUnsafe(
+        `UPDATE ml_alert_outcomes SET outcome_notes = $1 WHERE alert_id = $2 AND intervention_id = $3`,
+        remarks || null,
+        intervention.alertId,
+        intervention.id,
+      );
+    } catch (err) {
+      logger.error(`Failed to sync ml_alert_outcomes on outcome edit alertId=${intervention.alertId} interventionId=${intervention.id}: ${err}`);
+    }
+  }
+
   sendSuccess(res, updated);
 }
 
