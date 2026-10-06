@@ -66,6 +66,8 @@ export async function getStudentResult(assessmentId: string, studentId: string) 
   return res.data;
 }
 
+export const getAssessmentResults = getResults;
+
 export async function bulkUploadScores(assessmentId: string, file: File) {
   const formData = new FormData();
   formData.append("file", file);

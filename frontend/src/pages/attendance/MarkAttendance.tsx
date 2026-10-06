@@ -4,7 +4,6 @@ import {
   getSessionWindows,
   getWindowAttendance,
   bulkMarkAttendance,
-  type AttendanceRecord,
 } from '../../services/attendance.service';
 
 type Status = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
@@ -27,7 +26,7 @@ interface StudentRow {
   saved: boolean;
 }
 
-export default function MarkAttendance() {
+export function MarkAttendance() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [windows, setWindows] = useState<WindowInfo[]>([]);
   const [selectedWindowId, setSelectedWindowId] = useState<string>('');
@@ -38,7 +37,10 @@ export default function MarkAttendance() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      setLoading(false);
+      return;
+    }
     loadWindows();
   }, [sessionId]);
 
@@ -50,8 +52,8 @@ export default function MarkAttendance() {
   async function loadWindows() {
     setLoading(true);
     try {
-      const res = await getSessionWindows(sessionId!);
-      const wins = res.data || [];
+      const res: any = await getSessionWindows(sessionId!);
+      const wins = Array.isArray(res) ? res : res?.data ?? [];
       setWindows(wins);
       if (wins.length > 0) {
         setSelectedWindowId(wins[0].id);
@@ -65,38 +67,34 @@ export default function MarkAttendance() {
   async function loadAttendance() {
     setLoading(true);
     try {
-      const res = await getWindowAttendance(selectedWindowId);
-      const data = res.data;
+      const res: any = await getWindowAttendance(selectedWindowId);
+      const data = res?.data ?? res ?? {};
       setSessionTitle(data.session?.title || '');
-
       const studentRows: StudentRow[] = [];
-
       for (const rec of data.records || []) {
         studentRows.push({
-          studentId: rec.student.id,
-          name: rec.student.name,
-          email: rec.student.email,
-          department: rec.student.department || null,
-          year: rec.student.year || null,
+          studentId: rec.student?.id || rec.studentId,
+          name: rec.student?.name || 'Student',
+          email: rec.student?.email || '',
+          department: rec.student?.department || null,
+          year: rec.student?.year || null,
           status: rec.status,
           remarks: rec.remarks || '',
           saved: true,
         });
       }
-
       for (const um of data.unmarked || []) {
         studentRows.push({
           studentId: um.studentId,
-          name: um.student.name,
-          email: um.student.email,
-          department: um.student.department || null,
-          year: um.student.year || null,
+          name: um.student?.name || 'Student',
+          email: um.student?.email || '',
+          department: um.student?.department || null,
+          year: um.student?.year || null,
           status: 'ABSENT',
           remarks: '',
           saved: false,
         });
       }
-
       setRows(studentRows.sort((a, b) => a.name.localeCompare(b.name)));
     } catch {
       setMessage('Failed to load attendance data');
@@ -118,8 +116,7 @@ export default function MarkAttendance() {
     if (!selectedWindowId) return;
     setSaving(true);
     setMessage('');
-
-    const records: AttendanceRecord[] = rows
+    const records = rows
       .filter((r) => !r.saved)
       .map((r) => ({
         studentId: r.studentId,
@@ -134,9 +131,9 @@ export default function MarkAttendance() {
     }
 
     try {
-      const res = await bulkMarkAttendance(selectedWindowId, records);
-      const data = res.data;
-      setMessage(`Saved: ${data.success} of ${data.total} records.`);
+      const res: any = await bulkMarkAttendance(selectedWindowId, records);
+      const data = res?.data ?? res ?? {};
+      setMessage(`Saved: ${data.count ?? records.length} records.`);
       await loadAttendance();
     } catch (err: any) {
       setMessage(err.response?.data?.error || 'Failed to save attendance');
@@ -164,12 +161,16 @@ export default function MarkAttendance() {
           {sessionTitle && <p className="text-gray-600">{sessionTitle}</p>}
         </div>
         <div className="flex gap-2">
-          <Link to={`/attendance/session/${sessionId}`} className="text-blue-600 hover:underline text-sm">
-            View Report
-          </Link>
-          <Link to={`/attendance/qr/${selectedWindowId}`} className="px-3 py-1 text-sm bg-gray-100 border rounded hover:bg-gray-200">
-            Show QR
-          </Link>
+          {sessionId && (
+            <Link to={`/attendance/session/${sessionId}`} className="text-blue-600 hover:underline text-sm">
+              View Report
+            </Link>
+          )}
+          {selectedWindowId && (
+            <Link to={`/attendance/qr-fullscreen/${selectedWindowId}`} className="px-3 py-1 text-sm bg-gray-100 border rounded hover:bg-gray-200">
+              Show QR
+            </Link>
+          )}
         </div>
       </div>
 
@@ -292,3 +293,4 @@ export default function MarkAttendance() {
     </div>
   );
 }
+export default MarkAttendance;

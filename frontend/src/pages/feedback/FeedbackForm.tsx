@@ -12,7 +12,7 @@ interface StudentRow {
   comments: string;
 }
 
-export default function FeedbackForm() {
+export function FeedbackForm() {
   const { id, sessionId } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
@@ -23,54 +23,58 @@ export default function FeedbackForm() {
   const [participationRating, setParticipationRating] = useState(3);
   const [comments, setComments] = useState('');
 
-  const [batchId, setBatchId] = useState('');
+  const [isBulk, setIsBulk] = useState(false);
+  const [bulkBatchId, setBulkBatchId] = useState('');
+  const [bulkSessionId, setBulkSessionId] = useState('');
+  const [sessions, setSessions] = useState<{ id: string; title: string }[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
-  const [bulkMode, setBulkMode] = useState(Boolean(sessionId) && !id);
 
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (isEdit && id) {
-      getFeedback(id).then(fb => {
-        setSingleSessionId(fb.sessionId);
-        setSingleStudentId(fb.studentId);
-        setEffortRating(fb.effortRating);
-        setParticipationRating(fb.participationRating);
-        setComments(fb.comments || '');
-      }).catch(() => setError('Failed to load feedback record.'));
+      setLoading(true);
+      getFeedback(id)
+        .then((f) => {
+          setSingleSessionId(f.sessionId);
+          setSingleStudentId(f.studentId);
+          setEffortRating(f.effortRating);
+          setParticipationRating(f.participationRating);
+          setComments(f.comments || '');
+        })
+        .catch(() => setError('Failed to load feedback.'))
+        .finally(() => setLoading(false));
     }
   }, [id, isEdit]);
 
   useEffect(() => {
-    if (bulkMode && batchId) {
-      getRoster(batchId).then((roster: any[]) => {
-        setStudents(roster.map((m: any) => ({
-          studentId: m.student?.id ?? m.studentId,
-          studentName: m.student?.name ?? m.studentId,
-          effortRating: 3,
-          participationRating: 3,
-          comments: '',
-        })));
-      }).catch(() => setError('Failed to load roster.'));
+    if (bulkBatchId) {
+      getSessions(bulkBatchId).then(setSessions).catch(() => setSessions([]));
+      getRoster(bulkBatchId)
+        .then((roster: any[]) => {
+          setStudents(
+            roster.map((s) => ({
+              studentId: s.id,
+              studentName: s.name,
+              effortRating: 3,
+              participationRating: 3,
+              comments: '',
+            }))
+          );
+        })
+        .catch(() => setStudents([]));
     }
-  }, [batchId, bulkMode]);
-
-  function updateStudentField(index: number, field: keyof StudentRow, value: string | number) {
-    setStudents(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
-  }
+  }, [bulkBatchId]);
 
   async function handleSingleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
     setError('');
-    setSuccess('');
-    setLoading(true);
-
     try {
       if (isEdit && id) {
-        await updateFeedback(id, { effortRating, participationRating, comments: comments || undefined });
-        setSuccess('Feedback updated.');
+        await updateFeedback(id, { effortRating, participationRating, comments });
       } else {
         await createFeedback({
           sessionId: singleSessionId,
@@ -79,206 +83,247 @@ export default function FeedbackForm() {
           participationRating,
           comments: comments || undefined,
         });
-        setSuccess('Feedback submitted.');
-        setSingleStudentId('');
-        setEffortRating(3);
-        setParticipationRating(3);
-        setComments('');
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to submit feedback.');
+      navigate('/feedback');
+    } catch {
+      setError('Failed to save feedback.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
   async function handleBulkSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!bulkSessionId) {
+      setError('Please select a session.');
+      return;
+    }
+    setSaving(true);
     setError('');
-    setSuccess('');
-    setLoading(true);
-
     try {
-      const records = students.map(s => ({
-        studentId: s.studentId,
-        effortRating: s.effortRating,
-        participationRating: s.participationRating,
-        comments: s.comments || undefined,
-      }));
-
-      const res = await fetch('/api/feedback/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: singleSessionId, records }),
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        const skipped = data.data.skipped?.length || 0;
-        setSuccess(`Created ${data.data.created} of ${data.data.total} records.${skipped > 0 ? ` ${skipped} skipped.` : ''}`);
-      } else {
-        setError(data.error || 'Bulk submission failed.');
+      for (const row of students) {
+        await createFeedback({
+          sessionId: bulkSessionId,
+          studentId: row.studentId,
+          effortRating: row.effortRating,
+          participationRating: row.participationRating,
+          comments: row.comments || undefined,
+        });
       }
+      navigate('/feedback');
     } catch {
-      setError('Failed to submit bulk feedback.');
+      setError('Failed to save bulk feedback.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
-  const ratingOptions = [1, 2, 3, 4, 5];
+  function updateStudentRow(index: number, field: keyof StudentRow, value: any) {
+    setStudents((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  }
+
+  if (loading) return <p className="text-gray-500">Loading...</p>;
 
   return (
-    <div>
+    <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">
           {isEdit ? 'Edit Feedback' : 'Give Feedback'}
         </h1>
-        <button onClick={() => navigate('/feedback')} className="text-sm text-gray-600 hover:underline">
-          Back to list
-        </button>
+        {!isEdit && (
+          <button
+            type="button"
+            onClick={() => setIsBulk(!isBulk)}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            {isBulk ? 'Switch to Single Entry' : 'Switch to Bulk (Batch) Entry'}
+          </button>
+        )}
       </div>
 
-      {!isEdit && (
-        <div className="mb-4 flex gap-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="radio" checked={!bulkMode} onChange={() => setBulkMode(false)} />
-            Single student
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="radio" checked={bulkMode} onChange={() => setBulkMode(true)} />
-            Bulk (entire batch)
-          </label>
-        </div>
-      )}
-
       {error && <p className="text-red-600 mb-4">{error}</p>}
-      {success && <p className="text-green-600 mb-4">{success}</p>}
 
-      {(!bulkMode || isEdit) ? (
-        <form onSubmit={handleSingleSubmit} className="space-y-4 max-w-lg">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Session ID</label>
-            <input
-              type="text"
-              value={singleSessionId}
-              onChange={e => setSingleSessionId(e.target.value)}
-              disabled={isEdit}
-              required
-              className="w-full border rounded px-3 py-2 text-sm disabled:bg-gray-100"
-            />
-          </div>
+      {!isBulk ? (
+        <form onSubmit={handleSingleSubmit} className="space-y-4">
           {!isEdit && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
-              <input
-                type="text"
-                value={singleStudentId}
-                onChange={e => setSingleStudentId(e.target.value)}
-                required
-                className="w-full border rounded px-3 py-2 text-sm"
-              />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Session ID</label>
+                <input
+                  type="text"
+                  required
+                  value={singleSessionId}
+                  onChange={(e) => setSingleSessionId(e.target.value)}
+                  className="mt-1 block w-full border rounded px-3 py-2 text-sm"
+                  placeholder="Session UUID"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Student ID</label>
+                <input
+                  type="text"
+                  required
+                  value={singleStudentId}
+                  onChange={(e) => setSingleStudentId(e.target.value)}
+                  className="mt-1 block w-full border rounded px-3 py-2 text-sm"
+                  placeholder="Student UUID"
+                />
+              </div>
+            </>
           )}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Effort Rating</label>
-              <select value={effortRating} onChange={e => setEffortRating(Number(e.target.value))} className="w-full border rounded px-3 py-2 text-sm">
-                {ratingOptions.map(v => <option key={v} value={v}>{v} — {['', 'Poor', 'Below Avg', 'Average', 'Good', 'Excellent'][v]}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Participation Rating</label>
-              <select value={participationRating} onChange={e => setParticipationRating(Number(e.target.value))} className="w-full border rounded px-3 py-2 text-sm">
-                {ratingOptions.map(v => <option key={v} value={v}>{v} — {['', 'Poor', 'Below Avg', 'Average', 'Good', 'Excellent'][v]}</option>)}
-              </select>
-            </div>
-          </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Comments</label>
-            <textarea
-              value={comments}
-              onChange={e => setComments(e.target.value)}
-              rows={3}
-              maxLength={2000}
-              className="w-full border rounded px-3 py-2 text-sm"
+            <label className="block text-sm font-medium text-gray-700">
+              Effort Rating (1-5): {effortRating}
+            </label>
+            <input
+              type="range"
+              min={1}
+              max={5}
+              value={effortRating}
+              onChange={(e) => setEffortRating(Number(e.target.value))}
+              className="mt-1 w-full"
             />
           </div>
-          <button type="submit" disabled={loading} className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50">
-            {loading ? 'Submitting...' : isEdit ? 'Update' : 'Submit'}
-          </button>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Participation Rating (1-5): {participationRating}
+            </label>
+            <input
+              type="range"
+              min={1}
+              max={5}
+              value={participationRating}
+              onChange={(e) => setParticipationRating(Number(e.target.value))}
+              className="mt-1 w-full"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Comments</label>
+            <textarea
+              rows={3}
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+              className="mt-1 block w-full border rounded px-3 py-2 text-sm"
+              placeholder="Optional constructive comments..."
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : isEdit ? 'Update' : 'Submit'}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/feedback')}
+              className="border px-4 py-2 rounded text-sm hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
         </form>
       ) : (
         <form onSubmit={handleBulkSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 max-w-lg">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Session ID</label>
-              <input
-                type="text"
-                value={singleSessionId}
-                onChange={e => setSingleSessionId(e.target.value)}
-                required
-                className="w-full border rounded px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Batch ID (to load roster)</label>
-              <input
-                type="text"
-                value={batchId}
-                onChange={e => setBatchId(e.target.value)}
-                className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="Enter batch ID to load students"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Batch ID</label>
+            <input
+              type="text"
+              required
+              value={bulkBatchId}
+              onChange={(e) => setBulkBatchId(e.target.value)}
+              className="mt-1 block w-full border rounded px-3 py-2 text-sm"
+              placeholder="Batch UUID to load students & sessions"
+            />
           </div>
 
-          {students.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full bg-white border rounded">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Student</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Effort</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Participation</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Comments</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {students.map((s, i) => (
-                    <tr key={s.studentId}>
-                      <td className="px-4 py-2 text-sm">{s.studentName}</td>
-                      <td className="px-4 py-2">
-                        <select value={s.effortRating} onChange={e => updateStudentField(i, 'effortRating', Number(e.target.value))} className="border rounded px-2 py-1 text-sm">
-                          {ratingOptions.map(v => <option key={v} value={v}>{v}</option>)}
-                        </select>
-                      </td>
-                      <td className="px-4 py-2">
-                        <select value={s.participationRating} onChange={e => updateStudentField(i, 'participationRating', Number(e.target.value))} className="border rounded px-2 py-1 text-sm">
-                          {ratingOptions.map(v => <option key={v} value={v}>{v}</option>)}
-                        </select>
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          type="text"
-                          value={s.comments}
-                          onChange={e => updateStudentField(i, 'comments', e.target.value)}
-                          className="border rounded px-2 py-1 text-sm w-full"
-                          maxLength={2000}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {sessions.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Session</label>
+              <select
+                required
+                value={bulkSessionId}
+                onChange={(e) => setBulkSessionId(e.target.value)}
+                className="mt-1 block w-full border rounded px-3 py-2 text-sm"
+              >
+                <option value="">Select a session</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>{s.title}</option>
+                ))}
+              </select>
             </div>
           )}
 
-          <button type="submit" disabled={loading || students.length === 0} className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50">
-            {loading ? 'Submitting...' : `Submit Feedback for ${students.length} Students`}
-          </button>
+          {students.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-semibold text-gray-800">Students ({students.length})</h3>
+              {students.map((st, i) => (
+                <div key={st.studentId} className="p-3 border rounded bg-white space-y-2">
+                  <span className="font-medium text-sm">{st.studentName}</span>
+                  <div className="flex gap-4">
+                    <label className="text-xs text-gray-600">
+                      Effort:
+                      <input
+                        type="number"
+                        min={1}
+                        max={5}
+                        value={st.effortRating}
+                        onChange={(e) => updateStudentRow(i, 'effortRating', Number(e.target.value))}
+                        className="ml-1 border rounded w-14 px-1 py-0.5 text-xs"
+                      />
+                    </label>
+                    <label className="text-xs text-gray-600">
+                      Participation:
+                      <input
+                        type="number"
+                        min={1}
+                        max={5}
+                        value={st.participationRating}
+                        onChange={(e) => updateStudentRow(i, 'participationRating', Number(e.target.value))}
+                        className="ml-1 border rounded w-14 px-1 py-0.5 text-xs"
+                      />
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Comments..."
+                    value={st.comments}
+                    onChange={(e) => updateStudentRow(i, 'comments', e.target.value)}
+                    className="w-full border rounded px-2 py-1 text-xs"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={saving || students.length === 0}
+              className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Saving All...' : 'Submit Bulk Feedback'}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/feedback')}
+              className="border px-4 py-2 rounded text-sm hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
         </form>
       )}
     </div>
   );
 }
+export default FeedbackForm;

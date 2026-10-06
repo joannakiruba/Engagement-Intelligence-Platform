@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getAssessment, getResults } from "../../services/assessments.service";
 import { useAuth } from "../../context/AuthContext";
 
-export default function AssessmentDetail() {
+export function AssessmentDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const canManage = user && ["TRAINER", "ADMIN"].includes(user.role);
+
   const [assessment, setAssessment] = useState<any>(null);
   const [results, setResults] = useState<any>(null);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
@@ -14,11 +15,12 @@ export default function AssessmentDetail() {
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([getAssessment(id), getResults(id)]).then(([aRes, rRes]) => {
-      setAssessment(aRes.data);
-      setResults(rRes.data);
-      setLoading(false);
-    });
+    Promise.all([getAssessment(id), getResults(id)])
+      .then(([aRes, rRes]) => {
+        setAssessment(aRes?.data ?? aRes);
+        setResults(rRes?.data ?? rRes);
+      })
+      .finally(() => setLoading(false));
   }, [id]);
 
   if (loading) return <p className="text-gray-500">Loading...</p>;
@@ -32,9 +34,9 @@ export default function AssessmentDetail() {
         <div>
           <h1 className="text-2xl font-bold">{assessment.title}</h1>
           <p className="text-gray-500">
-            {assessment.type.replace("_", " ")} | Batch: {assessment.batch?.name} | Max Score:{" "}
+            {assessment.type?.replace("_", " ")} | Batch: {assessment.batch?.name || assessment.batchId} | Max Score:{" "}
             {assessment.maxScore} | Date:{" "}
-            {new Date(assessment.assessmentDate).toLocaleDateString()}
+            {assessment.assessmentDate ? new Date(assessment.assessmentDate).toLocaleDateString() : 'N/A'}
           </p>
         </div>
         {canManage && (
@@ -46,7 +48,7 @@ export default function AssessmentDetail() {
               Enter Scores
             </Link>
             <Link
-              to={`/assessments/${id}/bulk-upload`}
+              to={`/assessments/${id}/upload`}
               className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700"
             >
               Bulk Upload
@@ -55,33 +57,32 @@ export default function AssessmentDetail() {
         )}
       </div>
 
-      <h2 className="text-lg font-semibold mb-3">Structure</h2>
-      {assessment.sections?.length === 0 ? (
-        <p className="text-gray-500 mb-6">No sections defined.</p>
-      ) : (
-        <div className="space-y-3 mb-6">
-          {assessment.sections?.map((section: any) => (
-            <div key={section.id} className="bg-white border rounded-lg p-4">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-medium">{section.title}</h3>
-                {section.weightage !== null && (
-                  <span className="text-sm text-gray-500">Weight: {section.weightage}%</span>
-                )}
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold mb-3">Sections</h2>
+        {!assessment.sections?.length ? (
+          <p className="text-gray-500">No sections defined.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {assessment.sections.map((s: any) => (
+              <div key={s.id} className="border rounded-lg p-4 bg-white">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="font-medium">{s.title}</h3>
+                  {s.weightage !== null && s.weightage !== undefined && (
+                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                      {s.weightage}% weight
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-gray-500">
+                  {s.questions?.length || 0} questions
+                </div>
               </div>
-              <div className="ml-4 space-y-1">
-                {section.questions?.map((q: any) => (
-                  <div key={q.id} className="flex justify-between text-sm text-gray-600">
-                    <span>{q.label}</span>
-                    <span>Max: {q.maxScore}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
 
-      <h2 className="text-lg font-semibold mb-3">Results ({results?.results?.length || 0})</h2>
+      <h2 className="text-lg font-semibold mb-3">Results</h2>
       {!results?.results?.length ? (
         <p className="text-gray-500">No results submitted yet.</p>
       ) : (
@@ -104,9 +105,8 @@ export default function AssessmentDetail() {
             </thead>
             <tbody>
               {results.results.map((r: any) => (
-                <>
+                <React.Fragment key={r.studentId}>
                   <tr
-                    key={r.studentId}
                     className="border-t hover:bg-gray-50 cursor-pointer"
                     onClick={() =>
                       setExpandedStudent(expandedStudent === r.studentId ? null : r.studentId)
@@ -153,7 +153,7 @@ export default function AssessmentDetail() {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -162,3 +162,4 @@ export default function AssessmentDetail() {
     </div>
   );
 }
+export default AssessmentDetail;

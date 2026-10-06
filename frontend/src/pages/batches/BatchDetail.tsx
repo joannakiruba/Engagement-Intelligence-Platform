@@ -9,42 +9,54 @@ import {
   removeTrainer,
   getSessions,
   createSession,
-  updateSession,
   deleteSession,
-  type BatchDetail as BatchDetailType,
-  type RosterStudent,
-  type SessionItem,
-  type BatchTrainer,
 } from "../../services/batches.service";
-import { getRoles, type Role } from "../../services/users.service";
 import { useAuth } from "../../context/AuthContext";
-import UserPicker from "../../components/UserPicker";
 
-export default function BatchDetail() {
+interface Trainer {
+  id: string;
+  name: string;
+  email: string;
+  assignedAt?: string;
+}
+
+interface Student {
+  id: string;
+  name: string;
+  email: string;
+  department?: string | null;
+  joinedAt?: string;
+}
+
+interface Session {
+  id: string;
+  title: string;
+  topic?: string | null;
+  scheduledDate: string;
+  startTime: string;
+  endTime: string;
+  trainer?: { id: string; name: string; email: string };
+}
+
+export function BatchDetail() {
   const { id } = useParams();
   const { user } = useAuth();
-  const isAdmin = user?.role === "ADMIN";
-  const canManageSessions = user && ["TRAINER", "ADMIN"].includes(user.role);
+  const isAdmin = user?.role === "ADMIN" || user?.role === "COORDINATOR";
+  const canManageSessions = user && ["TRAINER", "ADMIN", "COORDINATOR"].includes(user.role);
 
-  const [batch, setBatch] = useState<BatchDetailType | null>(null);
-  const [roster, setRoster] = useState<RosterStudent[]>([]);
-  const [sessions, setSessions] = useState<SessionItem[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
+  const [batch, setBatch] = useState<any>(null);
+  const [roster, setRoster] = useState<Student[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Add student
+  // Add student form
   const [studentId, setStudentId] = useState("");
   const [studentError, setStudentError] = useState("");
 
-  // Add trainer
+  // Add trainer form
   const [trainerId, setTrainerId] = useState("");
   const [trainerError, setTrainerError] = useState("");
-
-  // Remove confirmations
-  const [confirmRemoveStudent, setConfirmRemoveStudent] = useState<string | null>(null);
-  const [confirmRemoveTrainer, setConfirmRemoveTrainer] = useState<string | null>(null);
-  const [confirmDeleteSession, setConfirmDeleteSession] = useState<string | null>(null);
 
   // Create session form
   const [showSessionForm, setShowSessionForm] = useState(false);
@@ -56,37 +68,20 @@ export default function BatchDetail() {
   const [sessionEndTime, setSessionEndTime] = useState("");
   const [sessionError, setSessionError] = useState("");
 
-  // Edit session
-  const [editingSession, setEditingSession] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editTopic, setEditTopic] = useState("");
-  const [editTrainerId, setEditTrainerId] = useState("");
-  const [editDate, setEditDate] = useState("");
-  const [editStartTime, setEditStartTime] = useState("");
-  const [editEndTime, setEditEndTime] = useState("");
-  const [editError, setEditError] = useState("");
-
-  function roleIdFor(name: string): string | undefined {
-    return roles.find((r) => r.name === name)?.id;
-  }
-
   const loadAll = async () => {
     if (!id) return;
     setLoading(true);
-    setError("");
     try {
-      const [batchRes, rosterRes, sessionsRes, rolesRes] = await Promise.all([
+      const [batchRes, rosterRes, sessionsRes]: any[] = await Promise.all([
         getBatch(id),
         getRoster(id),
         getSessions(id),
-        roles.length ? Promise.resolve(roles) : getRoles(),
       ]);
-      setBatch(batchRes);
-      setRoster(rosterRes);
-      setSessions(sessionsRes);
-      if (!roles.length) setRoles(rolesRes as Role[]);
+      setBatch(batchRes?.data ?? batchRes);
+      setRoster(Array.isArray(rosterRes) ? rosterRes : rosterRes?.data ?? []);
+      setSessions(Array.isArray(sessionsRes) ? sessionsRes : sessionsRes?.data ?? []);
     } catch {
-      setError("Failed to load batch details.");
+      setError("Failed to load batch details");
     }
     setLoading(false);
   };
@@ -95,68 +90,65 @@ export default function BatchDetail() {
     loadAll();
   }, [id]);
 
-  // --- Student handlers ---
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentId) return;
     setStudentError("");
     try {
       await addStudent(id!, studentId);
       setStudentId("");
-      setRoster(await getRoster(id!));
+      const res: any = await getRoster(id!);
+      setRoster(Array.isArray(res) ? res : res?.data ?? []);
     } catch (err: any) {
       setStudentError(err.response?.data?.error || "Failed to add student");
     }
   };
 
   const handleRemoveStudent = async (sid: string) => {
-    setConfirmRemoveStudent(null);
-    setStudentError("");
+    if (!confirm("Remove this student from the batch?")) return;
     try {
       await removeStudent(id!, sid);
-      setRoster(await getRoster(id!));
+      const res: any = await getRoster(id!);
+      setRoster(Array.isArray(res) ? res : res?.data ?? []);
     } catch (err: any) {
       setStudentError(err.response?.data?.error || "Failed to remove student");
     }
   };
 
-  // --- Trainer handlers ---
   const handleAssignTrainer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!trainerId) return;
     setTrainerError("");
     try {
       await assignTrainer(id!, trainerId);
       setTrainerId("");
-      setBatch(await getBatch(id!));
+      const res: any = await getBatch(id!);
+      setBatch(res?.data ?? res);
     } catch (err: any) {
       setTrainerError(err.response?.data?.error || "Failed to assign trainer");
     }
   };
 
   const handleRemoveTrainer = async (tid: string) => {
-    setConfirmRemoveTrainer(null);
-    setTrainerError("");
+    if (!confirm("Remove this trainer from the batch?")) return;
     try {
       await removeTrainer(id!, tid);
-      setBatch(await getBatch(id!));
+      const res: any = await getBatch(id!);
+      setBatch(res?.data ?? res);
     } catch (err: any) {
       setTrainerError(err.response?.data?.error || "Failed to remove trainer");
     }
   };
 
-  // --- Session handlers ---
   const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
     setSessionError("");
     try {
       await createSession(id!, {
-        trainerId: sessionTrainerId,
+        trainerId: sessionTrainerId || undefined,
         title: sessionTitle,
         topic: sessionTopic || undefined,
         scheduledDate: new Date(sessionDate).toISOString(),
-        startTime: new Date(`${sessionDate}T${sessionStartTime}`).toISOString(),
-        endTime: new Date(`${sessionDate}T${sessionEndTime}`).toISOString(),
+        startTime: sessionStartTime ? new Date(`${sessionDate}T${sessionStartTime}`).toISOString() : undefined,
+        endTime: sessionEndTime ? new Date(`${sessionDate}T${sessionEndTime}`).toISOString() : undefined,
       });
       setSessionTitle("");
       setSessionTopic("");
@@ -165,413 +157,222 @@ export default function BatchDetail() {
       setSessionStartTime("");
       setSessionEndTime("");
       setShowSessionForm(false);
-      setSessions(await getSessions(id!));
+      const res: any = await getSessions(id!);
+      setSessions(Array.isArray(res) ? res : res?.data ?? []);
     } catch (err: any) {
-      setSessionError(
-        err.response?.data?.error ||
-        err.response?.data?.details?.[0]?.message ||
-        "Failed to create session"
-      );
-    }
-  };
-
-  function startEditSession(s: SessionItem) {
-    setEditingSession(s.id);
-    setEditTitle(s.title);
-    setEditTopic(s.topic || "");
-    setEditTrainerId(s.trainer.id);
-    setEditDate(s.scheduledDate.split("T")[0]);
-    setEditStartTime(new Date(s.startTime).toTimeString().slice(0, 5));
-    setEditEndTime(new Date(s.endTime).toTimeString().slice(0, 5));
-    setEditError("");
-  }
-
-  const handleUpdateSession = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingSession) return;
-    setEditError("");
-    try {
-      const session = sessions.find((s) => s.id === editingSession)!;
-      await updateSession(editingSession, {
-        trainerId: editTrainerId,
-        title: editTitle,
-        topic: editTopic || undefined,
-        scheduledDate: new Date(editDate).toISOString(),
-        startTime: new Date(`${editDate}T${editStartTime}`).toISOString(),
-        endTime: new Date(`${editDate}T${editEndTime}`).toISOString(),
-      });
-      setEditingSession(null);
-      setSessions(await getSessions(id!));
-    } catch (err: any) {
-      setEditError(
-        err.response?.data?.error ||
-        err.response?.data?.details?.[0]?.message ||
-        "Failed to update session"
-      );
+      setSessionError(err.response?.data?.error || "Failed to create session");
     }
   };
 
   const handleDeleteSession = async (sid: string) => {
-    setConfirmDeleteSession(null);
-    setSessionError("");
+    if (!confirm("Delete this session?")) return;
     try {
       await deleteSession(sid);
-      setSessions(await getSessions(id!));
-    } catch (err: any) {
-      setSessionError(err.response?.data?.error || "Failed to delete session");
+      const res: any = await getSessions(id!);
+      setSessions(Array.isArray(res) ? res : res?.data ?? []);
+    } catch {
+      alert("Failed to delete session");
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-gray-500 py-8">
-        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-        Loading batch details…
-      </div>
-    );
-  }
-
-  if (error && !batch) {
-    return (
-      <div className="py-8">
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded px-4 py-3 mb-4">{error}</div>
-        <Link to="/batches" className="text-blue-600 hover:underline text-sm">&larr; Back to Batches</Link>
-      </div>
-    );
-  }
-
-  if (!batch) return <p className="text-red-500 py-8">Batch not found.</p>;
+  if (loading) return <p className="text-gray-500">Loading batch details...</p>;
+  if (error) return <p className="text-red-500">{error}</p>;
+  if (!batch) return <p className="text-gray-500">Batch not found.</p>;
 
   return (
-    <div>
-      <Link to="/batches" className="text-blue-600 hover:underline text-sm mb-4 inline-block">&larr; Back to Batches</Link>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded px-4 py-2 mb-4 text-sm">{error}</div>
-      )}
-
-      {/* Batch Info */}
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{batch.name}</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            {batch.department && <span className="mr-2">{batch.department}</span>}
-            {new Date(batch.startDate).toLocaleDateString()}
-            {batch.endDate && ` — ${new Date(batch.endDate).toLocaleDateString()}`}
-          </p>
-          {batch.description && <p className="text-gray-600 text-sm mt-2">{batch.description}</p>}
-        </div>
-        {isAdmin && (
+    <div className="space-y-8">
+      <div>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl font-bold">{batch.name}</h1>
+            <p className="text-gray-500">
+              Department: {batch.department || "General"} | Start:{" "}
+              {new Date(batch.startDate).toLocaleDateString()}
+              {batch.endDate && ` | End: ${new Date(batch.endDate).toLocaleDateString()}`}
+            </p>
+            {batch.description && <p className="text-gray-600 mt-2">{batch.description}</p>}
+          </div>
           <Link
-            to={`/batches/${id}/edit`}
-            className="bg-gray-100 border px-4 py-2 rounded text-sm hover:bg-gray-200"
+            to="/batches"
+            className="text-sm text-indigo-600 hover:underline"
           >
-            Edit Batch
+            &larr; Back to Batches
           </Link>
+        </div>
+      </div>
+
+      {/* Roster & Students */}
+      <div className="bg-white border rounded-xl p-6 shadow-xs">
+        <h2 className="text-lg font-bold mb-4">Student Roster ({roster.length})</h2>
+        {isAdmin && (
+          <form onSubmit={handleAddStudent} className="flex gap-2 mb-4">
+            <input
+              type="text"
+              placeholder="Student ID / UUID"
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              className="border rounded px-3 py-1.5 text-sm flex-1 max-w-sm"
+              required
+            />
+            <button
+              type="submit"
+              className="bg-indigo-600 text-white px-4 py-1.5 rounded text-sm hover:bg-indigo-700 font-medium"
+            >
+              Add Student
+            </button>
+          </form>
+        )}
+        {studentError && <p className="text-red-600 text-xs mb-2">{studentError}</p>}
+        {roster.length === 0 ? (
+          <p className="text-gray-400 text-sm">No students enrolled yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr>
+                  <th className="text-left px-3 py-2">Name</th>
+                  <th className="text-left px-3 py-2">Email</th>
+                  <th className="text-left px-3 py-2">Department</th>
+                  {isAdmin && <th className="text-right px-3 py-2">Action</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {roster.map((s) => (
+                  <tr key={s.id} className="hover:bg-slate-50">
+                    <td className="px-3 py-2 font-medium">{s.name}</td>
+                    <td className="px-3 py-2 text-slate-500">{s.email}</td>
+                    <td className="px-3 py-2 text-slate-500">{s.department || "—"}</td>
+                    {isAdmin && (
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          onClick={() => handleRemoveStudent(s.id)}
+                          className="text-rose-600 hover:text-rose-800 text-xs font-medium"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {/* Trainers */}
-      <section className="mb-8">
-        <h2 className="text-lg font-semibold mb-3 text-gray-800">
-          Trainers ({batch.trainers?.length || 0})
-        </h2>
-
-        {batch.trainers?.length > 0 && (
-          <div className="bg-white border rounded-lg mb-3 overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Name</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Email</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Assigned</th>
-                  {isAdmin && <th className="text-left px-4 py-2 text-sm font-medium text-gray-600 w-28">Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {batch.trainers.map((t: BatchTrainer) => (
-                  <tr key={t.id} className="border-t">
-                    <td className="px-4 py-2 text-sm font-medium">{t.name}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{t.email}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{new Date(t.assignedAt).toLocaleDateString()}</td>
-                    {isAdmin && (
-                      <td className="px-4 py-2 text-sm">
-                        {confirmRemoveTrainer === t.id ? (
-                          <span className="flex items-center gap-2">
-                            <button onClick={() => handleRemoveTrainer(t.id)} className="text-red-700 font-medium text-xs hover:underline">Yes</button>
-                            <button onClick={() => setConfirmRemoveTrainer(null)} className="text-gray-500 text-xs hover:underline">No</button>
-                          </span>
-                        ) : (
-                          <button onClick={() => setConfirmRemoveTrainer(t.id)} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {isAdmin && (
-          <>
-            <form onSubmit={handleAssignTrainer} className="flex items-end gap-2 max-w-lg">
-              <div className="flex-1">
-                <UserPicker
-                  label="Assign Trainer"
-                  roleId={roleIdFor("TRAINER")}
-                  value={trainerId}
-                  onChange={(uid) => setTrainerId(uid)}
-                  placeholder="Search trainers…"
-                  required
-                />
-              </div>
-              <button type="submit" className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 mb-px">
-                Assign
-              </button>
-            </form>
-            {trainerError && <p className="text-red-500 text-sm mt-1">{trainerError}</p>}
-          </>
-        )}
-      </section>
-
-      {/* Students / Roster */}
-      <section className="mb-8">
-        <h2 className="text-lg font-semibold mb-3 text-gray-800">Students ({roster.length})</h2>
-
-        {roster.length > 0 && (
-          <div className="bg-white border rounded-lg mb-3 overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Name</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Email</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Department</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Joined</th>
-                  {isAdmin && <th className="text-left px-4 py-2 text-sm font-medium text-gray-600 w-28">Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {roster.map((s) => (
-                  <tr key={s.id} className="border-t">
-                    <td className="px-4 py-2 text-sm font-medium">{s.name}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{s.email}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{s.department || "—"}</td>
-                    <td className="px-4 py-2 text-sm text-gray-500">{new Date(s.joinedAt).toLocaleDateString()}</td>
-                    {isAdmin && (
-                      <td className="px-4 py-2 text-sm">
-                        {confirmRemoveStudent === s.id ? (
-                          <span className="flex items-center gap-2">
-                            <button onClick={() => handleRemoveStudent(s.id)} className="text-red-700 font-medium text-xs hover:underline">Yes</button>
-                            <button onClick={() => setConfirmRemoveStudent(null)} className="text-gray-500 text-xs hover:underline">No</button>
-                          </span>
-                        ) : (
-                          <button onClick={() => setConfirmRemoveStudent(s.id)} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {isAdmin && (
-          <>
-            <form onSubmit={handleAddStudent} className="flex items-end gap-2 max-w-lg">
-              <div className="flex-1">
-                <UserPicker
-                  label="Add Student"
-                  roleId={roleIdFor("STUDENT")}
-                  value={studentId}
-                  onChange={(uid) => setStudentId(uid)}
-                  placeholder="Search students…"
-                  required
-                />
-              </div>
-              <button type="submit" className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 mb-px">
-                Add
-              </button>
-            </form>
-            {studentError && <p className="text-red-500 text-sm mt-1">{studentError}</p>}
-          </>
-        )}
-      </section>
-
-      {/* Sessions */}
-      <section className="mb-8">
-        <div className="flex justify-between items-center mb-3">
-          <h2 className="text-lg font-semibold text-gray-800">Sessions ({sessions.length})</h2>
+      {/* Sessions Section */}
+      <div className="bg-white border rounded-xl p-6 shadow-xs">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-bold">Scheduled Sessions ({sessions.length})</h2>
           {canManageSessions && (
             <button
-              onClick={() => { setShowSessionForm(!showSessionForm); setEditingSession(null); }}
-              className="bg-gray-100 border px-3 py-1 rounded text-sm hover:bg-gray-200"
+              onClick={() => setShowSessionForm(!showSessionForm)}
+              className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-indigo-700"
             >
-              {showSessionForm ? "Cancel" : "+ New Session"}
+              {showSessionForm ? "Cancel" : "+ Schedule Session"}
             </button>
           )}
         </div>
 
-        {sessionError && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-2 rounded mb-3 text-sm">{sessionError}</div>
-        )}
-
-        {/* Create Session Form */}
-        {showSessionForm && canManageSessions && (
-          <div className="bg-white border rounded-lg p-4 mb-4">
-            <h3 className="font-medium text-gray-800 mb-3">Create Session</h3>
-            {sessionError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 p-2 rounded mb-3 text-sm">{sessionError}</div>
-            )}
-            <form onSubmit={handleCreateSession} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                  <input type="text" value={sessionTitle} onChange={(e) => setSessionTitle(e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm" required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Topic</label>
-                  <input type="text" value={sessionTopic} onChange={(e) => setSessionTopic(e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm" />
-                </div>
-                <div>
-                  <UserPicker
-                    label="Trainer"
-                    roleId={roleIdFor("TRAINER")}
-                    value={sessionTrainerId}
-                    onChange={(uid) => setSessionTrainerId(uid)}
-                    placeholder="Search trainers…"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input type="date" value={sessionDate} onChange={(e) => setSessionDate(e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm" required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
-                  <input type="time" value={sessionStartTime} onChange={(e) => setSessionStartTime(e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm" required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                  <input type="time" value={sessionEndTime} onChange={(e) => setSessionEndTime(e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm" required />
-                </div>
+        {showSessionForm && (
+          <form onSubmit={handleCreateSession} className="bg-slate-50 p-4 rounded-xl mb-4 border border-slate-200 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Title</label>
+                <input
+                  type="text"
+                  required
+                  value={sessionTitle}
+                  onChange={(e) => setSessionTitle(e.target.value)}
+                  className="w-full border rounded px-3 py-1.5 text-sm bg-white"
+                  placeholder="e.g. Session 1: Trees & Graphs"
+                />
               </div>
-              <button type="submit" className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
-                Create Session
-              </button>
-            </form>
-          </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Topic</label>
+                <input
+                  type="text"
+                  value={sessionTopic}
+                  onChange={(e) => setSessionTopic(e.target.value)}
+                  className="w-full border rounded px-3 py-1.5 text-sm bg-white"
+                  placeholder="Topic details"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Date</label>
+                <input
+                  type="date"
+                  required
+                  value={sessionDate}
+                  onChange={(e) => setSessionDate(e.target.value)}
+                  className="w-full border rounded px-3 py-1.5 text-sm bg-white"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Start Time</label>
+                <input
+                  type="time"
+                  value={sessionStartTime}
+                  onChange={(e) => setSessionStartTime(e.target.value)}
+                  className="w-full border rounded px-3 py-1.5 text-sm bg-white"
+                />
+              </div>
+            </div>
+            {sessionError && <p className="text-rose-600 text-xs">{sessionError}</p>}
+            <button
+              type="submit"
+              className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-indigo-700"
+            >
+              Save Session
+            </button>
+          </form>
         )}
 
-        {sessions.length > 0 && (
-          <div className="bg-white border rounded-lg overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
+        {sessions.length === 0 ? (
+          <p className="text-slate-400 text-sm">No sessions scheduled yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Title</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Topic</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Date</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Time</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Trainer</th>
-                  <th className="text-left px-4 py-2 text-sm font-medium text-gray-600">Actions</th>
+                  <th className="text-left px-3 py-2">Session Title</th>
+                  <th className="text-left px-3 py-2">Topic</th>
+                  <th className="text-left px-3 py-2">Date</th>
+                  <th className="text-right px-3 py-2">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {sessions.map((s) => (
-                  editingSession === s.id ? (
-                    <tr key={s.id} className="border-t bg-blue-50">
-                      <td colSpan={6} className="px-4 py-3">
-                        <form onSubmit={handleUpdateSession} className="space-y-3">
-                          {editError && (
-                            <div className="bg-red-50 border border-red-200 text-red-700 p-2 rounded text-sm">{editError}</div>
-                          )}
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Title</label>
-                              <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" required />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Topic</label>
-                              <input type="text" value={editTopic} onChange={(e) => setEditTopic(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" />
-                            </div>
-                            <UserPicker
-                              label="Trainer"
-                              roleId={roleIdFor("TRAINER")}
-                              value={editTrainerId}
-                              onChange={(uid) => setEditTrainerId(uid)}
-                              placeholder="Search trainers…"
-                              required
-                            />
-                          </div>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
-                              <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" required />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Start</label>
-                              <input type="time" value={editStartTime} onChange={(e) => setEditStartTime(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" required />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">End</label>
-                              <input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" required />
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button type="submit" className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">Save</button>
-                            <button type="button" onClick={() => setEditingSession(null)} className="border px-3 py-1 rounded text-sm hover:bg-gray-100">Cancel</button>
-                          </div>
-                        </form>
-                      </td>
-                    </tr>
-                  ) : (
-                    <tr key={s.id} className="border-t hover:bg-gray-50">
-                      <td className="px-4 py-2 text-sm font-medium">{s.title}</td>
-                      <td className="px-4 py-2 text-sm text-gray-500">{s.topic || "—"}</td>
-                      <td className="px-4 py-2 text-sm">{new Date(s.scheduledDate).toLocaleDateString()}</td>
-                      <td className="px-4 py-2 text-sm">
-                        {new Date(s.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        {" — "}
-                        {new Date(s.endTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </td>
-                      <td className="px-4 py-2 text-sm">{s.trainer.name}</td>
-                      <td className="px-4 py-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          {user?.role === "TRAINER" && (
-                            <Link to={`/attendance/mark/${s.id}`} className="text-blue-600 hover:text-blue-800 text-xs">Attendance</Link>
-                          )}
-                          <Link to={`/attendance/session/${s.id}`} className="text-gray-600 hover:text-gray-800 text-xs">View</Link>
-                          {canManageSessions && (
-                            <button onClick={() => startEditSession(s)} className="text-blue-600 hover:text-blue-800 text-xs">Edit</button>
-                          )}
-                          {canManageSessions && (
-                            confirmDeleteSession === s.id ? (
-                              <span className="flex items-center gap-1">
-                                <button onClick={() => handleDeleteSession(s.id)} className="text-red-700 font-medium text-xs hover:underline">Yes</button>
-                                <button onClick={() => setConfirmDeleteSession(null)} className="text-gray-500 text-xs hover:underline">No</button>
-                              </span>
-                            ) : (
-                              <button onClick={() => setConfirmDeleteSession(s.id)} className="text-red-600 hover:text-red-800 text-xs">Delete</button>
-                            )
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
+                  <tr key={s.id} className="hover:bg-slate-50">
+                    <td className="px-3 py-2 font-medium">{s.title}</td>
+                    <td className="px-3 py-2 text-slate-500">{s.topic || "—"}</td>
+                    <td className="px-3 py-2 text-slate-500">
+                      {s.scheduledDate ? new Date(s.scheduledDate).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-right space-x-2">
+                      <Link
+                        to={`/attendance/session/${s.id}`}
+                        className="text-xs font-medium text-indigo-600 hover:underline"
+                      >
+                        Attendance
+                      </Link>
+                      {canManageSessions && (
+                        <button
+                          onClick={() => handleDeleteSession(s.id)}
+                          className="text-xs font-medium text-rose-600 hover:underline"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-
-        {sessions.length === 0 && !showSessionForm && (
-          <p className="text-gray-400 text-sm">No sessions yet.</p>
-        )}
-      </section>
+      </div>
     </div>
   );
 }
+export default BatchDetail;

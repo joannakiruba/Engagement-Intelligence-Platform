@@ -10,10 +10,10 @@ interface ExcusedRecord {
   createdAt: string;
   student: { id: string; name: string; email: string };
   session: { id: string; title: string; scheduledDate: string };
-  window: { id: string; label: string };
+  window?: { id: string; label: string };
 }
 
-export default function ExcusedReview() {
+export function ExcusedReview() {
   const [records, setRecords] = useState<ExcusedRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [batchId, setBatchId] = useState('');
@@ -36,8 +36,9 @@ export default function ExcusedReview() {
       if (sessionId) params.sessionId = sessionId;
       if (fromDate) params.from = fromDate;
       if (toDate) params.to = toDate;
-      const res = await getExcusedRecords(params);
-      setRecords(res.data);
+      const res: any = await getExcusedRecords(params);
+      const list = Array.isArray(res) ? res : res?.data ?? [];
+      setRecords(list);
     } catch {
       setRecords([]);
     }
@@ -69,7 +70,7 @@ export default function ExcusedReview() {
   }
 
   if (loading) {
-    return <div className="text-center py-10 text-gray-500">Loading...</div>;
+    return <div className="text-center py-10 text-gray-500">Loading excused absences...</div>;
   }
 
   return (
@@ -80,7 +81,7 @@ export default function ExcusedReview() {
       </div>
 
       {/* Filters */}
-      <form onSubmit={handleFilter} className="flex flex-wrap gap-3 mb-4 items-end">
+      <form onSubmit={handleFilter} className="flex flex-wrap gap-3 mb-4 items-end bg-white p-4 rounded-xl border border-slate-200">
         <div>
           <label className="block text-xs text-gray-500 mb-1">Batch ID</label>
           <input
@@ -88,7 +89,7 @@ export default function ExcusedReview() {
             value={batchId}
             onChange={(e) => setBatchId(e.target.value)}
             placeholder="Filter by batch..."
-            className="border rounded px-3 py-1.5 text-sm w-48"
+            className="border border-slate-300 rounded px-3 py-1.5 text-sm w-48"
           />
         </div>
         <div>
@@ -98,7 +99,7 @@ export default function ExcusedReview() {
             value={sessionId}
             onChange={(e) => setSessionId(e.target.value)}
             placeholder="Filter by session..."
-            className="border rounded px-3 py-1.5 text-sm w-48"
+            className="border border-slate-300 rounded px-3 py-1.5 text-sm w-48"
           />
         </div>
         <div>
@@ -107,7 +108,7 @@ export default function ExcusedReview() {
             type="date"
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm"
+            className="border border-slate-300 rounded px-3 py-1.5 text-sm"
           />
         </div>
         <div>
@@ -116,18 +117,18 @@ export default function ExcusedReview() {
             type="date"
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm"
+            className="border border-slate-300 rounded px-3 py-1.5 text-sm"
           />
         </div>
-        <button type="submit" className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
+        <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
           Apply
         </button>
       </form>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-gray-50 text-left text-sm text-gray-600">
+            <tr className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
               <th className="px-4 py-3">Student</th>
               <th className="px-4 py-3">Session</th>
               <th className="px-4 py-3">Date</th>
@@ -137,33 +138,32 @@ export default function ExcusedReview() {
               <th className="px-4 py-3 w-24">Action</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100 text-sm">
             {records.map((rec) => {
-              const date = new Date(rec.session.scheduledDate);
+              const date = rec.session?.scheduledDate ? new Date(rec.session.scheduledDate) : new Date();
               const isEditing = editingId === rec.id;
-
               return (
-                <tr key={rec.id} className="border-t text-sm">
+                <tr key={rec.id} className="hover:bg-slate-50">
                   <td className="px-4 py-2">
-                    <div className="font-medium">{rec.student.name}</div>
-                    <div className="text-xs text-gray-400">{rec.student.id.slice(0, 8)}</div>
+                    <div className="font-medium text-slate-800">{rec.student?.name || rec.studentId}</div>
+                    <div className="text-xs text-slate-400">{rec.student?.id?.slice(0, 8) || ''}</div>
                   </td>
-                  <td className="px-4 py-2">{rec.session.title}</td>
-                  <td className="px-4 py-2">{date.toLocaleDateString()}</td>
-                  <td className="px-4 py-2 text-gray-500">{DAY_NAMES[date.getDay()]}</td>
-                  <td className="px-4 py-2 text-gray-500">{rec.window.label}</td>
+                  <td className="px-4 py-2 text-slate-700">{rec.session?.title || 'Session'}</td>
+                  <td className="px-4 py-2 text-slate-600">{date.toLocaleDateString()}</td>
+                  <td className="px-4 py-2 text-slate-500">{DAY_NAMES[date.getDay()]}</td>
+                  <td className="px-4 py-2 text-slate-500">{rec.window?.label || 'General'}</td>
                   <td className="px-4 py-2">
                     {isEditing ? (
                       <input
                         type="text"
                         value={editRemarks}
                         onChange={(e) => setEditRemarks(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm w-full"
+                        className="border border-indigo-300 rounded px-2 py-1 text-sm w-full"
                         placeholder="Enter reason for excusal..."
                         autoFocus
                       />
                     ) : (
-                      <span className={rec.remarks ? 'text-gray-700' : 'text-gray-400 italic'}>
+                      <span className={rec.remarks ? 'text-slate-700' : 'text-slate-400 italic'}>
                         {rec.remarks || 'No reason recorded'}
                       </span>
                     )}
@@ -174,13 +174,13 @@ export default function ExcusedReview() {
                         <button
                           onClick={() => saveRemarks(rec.id)}
                           disabled={saving}
-                          className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                          className="px-2 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 disabled:opacity-50"
                         >
                           Save
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                          className="px-2 py-1 bg-slate-200 text-slate-700 rounded text-xs hover:bg-slate-300"
                         >
                           Cancel
                         </button>
@@ -188,7 +188,7 @@ export default function ExcusedReview() {
                     ) : (
                       <button
                         onClick={() => startEdit(rec)}
-                        className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                        className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs hover:bg-slate-200 font-medium"
                       >
                         Edit
                       </button>
@@ -199,7 +199,7 @@ export default function ExcusedReview() {
             })}
             {records.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
                   No excused records found.
                 </td>
               </tr>
@@ -210,3 +210,4 @@ export default function ExcusedReview() {
     </div>
   );
 }
+export default ExcusedReview;

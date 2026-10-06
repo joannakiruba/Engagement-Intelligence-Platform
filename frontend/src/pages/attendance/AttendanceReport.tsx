@@ -2,13 +2,6 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getBatchAttendanceStats, exportBatchExcel } from '../../services/attendance.service';
 
-const STATUS_CODE: Record<string, string> = {
-  PRESENT: 'P',
-  ABSENT: 'A',
-  LATE: 'L',
-  EXCUSED: 'E',
-};
-
 interface StudentStat {
   student: {
     id: string;
@@ -24,13 +17,14 @@ interface StudentStat {
 }
 
 interface BatchStats {
-  batch: { id: string; name: string };
+  batch?: { id: string; name: string };
+  batchId?: string;
   totalSessions: number;
   overallAttendanceRate: number;
-  students: StudentStat[];
+  students?: StudentStat[];
 }
 
-export default function AttendanceReport() {
+export function AttendanceReport() {
   const { batchId } = useParams<{ batchId: string }>();
   const [data, setData] = useState<BatchStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,7 +43,8 @@ export default function AttendanceReport() {
     setLoading(true);
     try {
       const res = await getBatchAttendanceStats(batchId!);
-      setData(res.data);
+      const parsed = res?.data ?? res;
+      setData(parsed);
     } catch {
       setData(null);
     }
@@ -62,7 +57,7 @@ export default function AttendanceReport() {
       const params: { from?: string; to?: string } = {};
       if (fromDate) params.from = fromDate;
       if (toDate) params.to = toDate;
-      const blob = await exportBatchExcel(batchId, params);
+      const blob = await exportBatchExcel(batchId);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -75,15 +70,14 @@ export default function AttendanceReport() {
   }
 
   if (loading) {
-    return <div className="text-center py-10 text-gray-500">Loading...</div>;
+    return <div className="text-center py-10 text-gray-500">Loading attendance report...</div>;
   }
 
   if (!data) {
     return <div className="text-center py-10 text-red-500">Failed to load batch attendance.</div>;
   }
 
-  let filteredStudents = data.students;
-
+  let filteredStudents = data.students || [];
   if (statusFilter !== 'ALL') {
     if (statusFilter === 'LOW') {
       filteredStudents = filteredStudents.filter((s) => s.attendanceRate < 75);
@@ -95,11 +89,11 @@ export default function AttendanceReport() {
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-bold">Attendance Report</h1>
-          <p className="text-gray-500 text-sm">{data.batch.name}</p>
+          <p className="text-gray-500 text-sm">{data.batch?.name || data.batchId || 'Batch Overview'}</p>
         </div>
         <button
           onClick={handleExportExcel}
-          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
+          className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium"
         >
           Download Excel
         </button>
@@ -107,90 +101,97 @@ export default function AttendanceReport() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3 mb-6">
-        <div className="bg-white p-4 rounded shadow text-center">
-          <div className="text-2xl font-bold">{data.totalSessions}</div>
-          <div className="text-xs text-gray-500">Total Sessions</div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
+          <p className="text-2xl font-bold text-slate-800">{data.totalSessions ?? 0}</p>
+          <p className="text-xs text-slate-500">Total Sessions Tracked</p>
         </div>
-        <div className="bg-white p-4 rounded shadow text-center">
-          <div className="text-2xl font-bold">{data.students.length}</div>
-          <div className="text-xs text-gray-500">Total Students</div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
+          <p className="text-2xl font-bold text-indigo-600">
+            {(data.overallAttendanceRate ?? 0).toFixed(1)}%
+          </p>
+          <p className="text-xs text-slate-500">Overall Attendance Rate</p>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-4 items-end">
+      {/* Filter bar */}
+      <div className="flex gap-3 mb-4 items-center bg-white p-3 rounded-xl border border-slate-200">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">From</label>
+          <label className="text-xs text-slate-500 block">From</label>
           <input
             type="date"
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm"
+            className="border border-slate-300 rounded px-2 py-1 text-xs"
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">To</label>
+          <label className="text-xs text-slate-500 block">To</label>
           <input
             type="date"
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm"
+            className="border border-slate-300 rounded px-2 py-1 text-xs"
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Attendance</label>
+          <label className="text-xs text-slate-500 block">Filter</label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm"
+            className="border border-slate-300 rounded px-2 py-1 text-xs"
           >
             <option value="ALL">All Students</option>
-            <option value="LOW">Below 75%</option>
+            <option value="LOW">Below 75% (&lt;75%)</option>
           </select>
         </div>
       </div>
 
-      {/* Students table */}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse bg-white shadow rounded-lg overflow-hidden">
-          <thead>
-            <tr className="bg-gray-50 text-left text-sm text-gray-600">
-              <th className="px-4 py-3 w-8">#</th>
-              <th className="px-4 py-3">Student</th>
-              <th className="px-4 py-3 text-center">{STATUS_CODE.PRESENT}</th>
-              <th className="px-4 py-3 text-center">{STATUS_CODE.LATE}</th>
-              <th className="px-4 py-3 text-center">{STATUS_CODE.ABSENT}</th>
-              <th className="px-4 py-3 text-center">{STATUS_CODE.EXCUSED}</th>
-              <th className="px-4 py-3 text-center">Total</th>
+      {/* Student stats table */}
+      <div className="overflow-x-auto bg-white rounded-xl border border-slate-200">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
+            <tr>
+              <th className="px-4 py-2 text-left">Student</th>
+              <th className="px-4 py-2 text-center">Total</th>
+              <th className="px-4 py-2 text-center">Present</th>
+              <th className="px-4 py-2 text-center">Late</th>
+              <th className="px-4 py-2 text-center">Absent</th>
+              <th className="px-4 py-2 text-center">Excused</th>
+              <th className="px-4 py-2 text-center">Rate</th>
             </tr>
           </thead>
-          <tbody>
-            {filteredStudents.map((s, idx) => (
-                <tr key={s.student.id} className="border-t text-sm">
-                  <td className="px-4 py-2 text-gray-400">{idx + 1}</td>
-                  <td className="px-4 py-2">
-                    <div className="font-medium">{s.student.name}</div>
-                    <div className="text-xs text-gray-400">{s.student.email}</div>
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs">{s.present}</span>
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded text-xs">{s.late}</span>
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded text-xs">{s.absent}</span>
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">{s.excused}</span>
-                  </td>
-                  <td className="px-4 py-2 text-center font-medium">{s.total}</td>
-                </tr>
-            ))}
-            {filteredStudents.length === 0 && (
+          <tbody className="divide-y divide-slate-100">
+            {filteredStudents.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">No students match the current filters.</td>
+                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
+                  No student records match the filter.
+                </td>
               </tr>
+            ) : (
+              filteredStudents.map((s) => (
+                <tr key={s.student.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-2">
+                    <p className="font-medium text-slate-800">{s.student.name}</p>
+                    <p className="text-xs text-slate-400">{s.student.email}</p>
+                  </td>
+                  <td className="px-4 py-2 text-center">{s.total}</td>
+                  <td className="px-4 py-2 text-center text-emerald-600">{s.present}</td>
+                  <td className="px-4 py-2 text-center text-amber-600">{s.late}</td>
+                  <td className="px-4 py-2 text-center text-rose-600">{s.absent}</td>
+                  <td className="px-4 py-2 text-center text-blue-600">{s.excused}</td>
+                  <td className="px-4 py-2 text-center font-bold">
+                    <span
+                      className={
+                        s.attendanceRate >= 75
+                          ? 'text-emerald-600'
+                          : 'text-rose-600 font-extrabold'
+                      }
+                    >
+                      {s.attendanceRate.toFixed(1)}%
+                    </span>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
@@ -198,3 +199,4 @@ export default function AttendanceReport() {
     </div>
   );
 }
+export default AttendanceReport;

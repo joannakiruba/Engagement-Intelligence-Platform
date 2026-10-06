@@ -1,4 +1,19 @@
 import api from './api';
+import type { User, RoleName } from '../types';
+
+export type { User, RoleName };
+
+export async function getMe(): Promise<User> {
+  const res = await api.get('/users/me');
+  const d = res.data.data;
+  return { ...d, role: (d.role?.name ?? d.role) as RoleName };
+}
+
+export async function updateMe(payload: Partial<User>): Promise<User> {
+  const res = await api.patch('/users/me', payload);
+  const d = res.data.data;
+  return { ...d, role: (d.role?.name ?? d.role) as RoleName };
+}
 
 export interface UserSummary {
   id: string;
@@ -33,6 +48,7 @@ export interface UserListParams {
   limit?: number;
   search?: string;
   roleId?: string;
+  role?: string;
   status?: string;
   department?: string;
 }
@@ -43,6 +59,7 @@ export interface CreateUserPayload {
   roleId?: string;
   department?: string;
   year?: number | null;
+  phone?: string;
 }
 
 export interface BulkCsvResult {
@@ -50,9 +67,10 @@ export interface BulkCsvResult {
   rejected: Array<{ row: number; email?: string; reason: string }>;
 }
 
-export async function getUsers(params: UserListParams = {}): Promise<UserListResponse> {
+export async function getUsers(params: UserListParams = {}): Promise<any> {
   const res = await api.get('/users', { params });
-  return res.data.data;
+  const data = res.data.data;
+  return Array.isArray(data) ? data : data?.users ?? data;
 }
 
 export async function getUser(id: string): Promise<UserDetail> {
@@ -65,7 +83,7 @@ export async function getRoles(): Promise<Role[]> {
   return res.data.data;
 }
 
-export async function createUser(payload: CreateUserPayload): Promise<UserDetail> {
+export async function createUser(payload: CreateUserPayload & { role?: string }): Promise<UserDetail> {
   const res = await api.post('/users', payload);
   return res.data.data;
 }

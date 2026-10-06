@@ -81,19 +81,20 @@ export interface CreateBatchPayload {
 }
 
 export interface CreateSessionPayload {
-  trainerId: string;
+  trainerId?: string;
   title: string;
   topic?: string;
   scheduledDate: string;
-  startTime: string;
-  endTime: string;
+  startTime?: string;
+  endTime?: string;
 }
 
 // --- Batches ---
 
-export async function getBatches(params: BatchListParams = {}): Promise<BatchListResponse> {
+export async function getBatches(params: BatchListParams = {}): Promise<any> {
   const res = await api.get(BATCHES_API, { params });
-  return res.data.data;
+  const data = res.data.data;
+  return Array.isArray(data) ? data : data?.batches ?? data;
 }
 
 export async function getBatch(id: string): Promise<BatchDetail> {

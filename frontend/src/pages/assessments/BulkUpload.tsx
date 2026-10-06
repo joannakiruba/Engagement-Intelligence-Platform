@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { bulkUploadScores } from "../../services/assessments.service";
 
-export default function BulkUpload() {
+export function BulkUpload() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
@@ -21,7 +21,7 @@ export default function BulkUpload() {
 
     try {
       const res = await bulkUploadScores(id!, file);
-      setResult(res.data);
+      setResult(res?.data ?? res);
     } catch (err: any) {
       setError(err.response?.data?.error || "Upload failed");
     }
@@ -55,72 +55,79 @@ export default function BulkUpload() {
         <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded mb-4">{error}</div>
       )}
 
-      <div className="flex items-center gap-4 mb-6">
-        <input
-          type="file"
-          accept=".csv"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-          className="border rounded px-3 py-2"
-        />
-        <button
-          onClick={handleUpload}
-          disabled={uploading || !file}
-          className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 disabled:opacity-50"
-        >
-          {uploading ? "Uploading..." : "Upload"}
-        </button>
-        <button
-          onClick={() => navigate(`/assessments/${id}`)}
-          className="border px-4 py-2 rounded hover:bg-gray-50"
-        >
-          Back
-        </button>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">CSV File</label>
+          <input
+            type="file"
+            accept=".csv"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleUpload}
+            disabled={uploading || !file}
+            className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {uploading ? "Uploading..." : "Upload & Process"}
+          </button>
+          <button
+            onClick={() => navigate(`/assessments/${id}`)}
+            className="border px-6 py-2 rounded hover:bg-gray-50"
+          >
+            Back
+          </button>
+        </div>
       </div>
 
       {result && (
-        <div>
-          <div className="grid grid-cols-4 gap-4 mb-4">
-            <div className="bg-white border rounded p-3 text-center">
-              <div className="text-2xl font-bold">{result.total}</div>
-              <div className="text-sm text-gray-500">Total Rows</div>
-            </div>
-            <div className="bg-green-50 border border-green-200 rounded p-3 text-center">
-              <div className="text-2xl font-bold text-green-600">{result.created}</div>
-              <div className="text-sm text-gray-500">Created</div>
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
-              <div className="text-2xl font-bold text-blue-600">{result.updated}</div>
-              <div className="text-sm text-gray-500">Updated</div>
-            </div>
-            <div className="bg-red-50 border border-red-200 rounded p-3 text-center">
-              <div className="text-2xl font-bold text-red-600">{result.errors}</div>
-              <div className="text-sm text-gray-500">Errors</div>
+        <div className="mt-8 space-y-4">
+          <div className="bg-white border rounded-lg p-4">
+            <h3 className="font-semibold text-lg mb-2">Upload Results</h3>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="bg-blue-50 p-3 rounded">
+                <p className="text-2xl font-bold text-blue-600">{result.totalRows ?? 0}</p>
+                <p className="text-xs text-gray-500">Total Rows</p>
+              </div>
+              <div className="bg-green-50 p-3 rounded">
+                <p className="text-2xl font-bold text-green-600">{result.successfulRows ?? 0}</p>
+                <p className="text-xs text-gray-500">Successful</p>
+              </div>
+              <div className="bg-red-50 p-3 rounded">
+                <p className="text-2xl font-bold text-red-600">{result.failedRows ?? 0}</p>
+                <p className="text-xs text-gray-500">Failed</p>
+              </div>
             </div>
           </div>
 
           {errorRows.length > 0 && (
-            <div>
-              <h3 className="font-medium mb-2 text-red-600">Errors</h3>
-              <table className="w-full bg-white border rounded text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left px-3 py-2">Row</th>
-                    <th className="text-left px-3 py-2">Student ID</th>
-                    <th className="text-left px-3 py-2">Question ID</th>
-                    <th className="text-left px-3 py-2">Error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {errorRows.map((r: any) => (
-                    <tr key={r.row} className="border-t">
-                      <td className="px-3 py-2">{r.row}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{r.studentId || "-"}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{r.questionId || "-"}</td>
-                      <td className="px-3 py-2 text-red-600">{r.error}</td>
+            <div className="bg-white border rounded-lg p-4">
+              <h4 className="font-medium text-red-700 mb-2">Row Errors</h4>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-gray-500">
+                      <th className="py-1">Row</th>
+                      <th className="py-1">Student ID</th>
+                      <th className="py-1">Question ID</th>
+                      <th className="py-1">Error</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {errorRows.map((r: any, idx: number) => (
+                      <tr key={idx} className="border-b text-red-600">
+                        <td className="py-1">{r.row}</td>
+                        <td className="py-1 font-mono text-xs">{r.studentId}</td>
+                        <td className="py-1 font-mono text-xs">{r.questionId}</td>
+                        <td className="py-1">{r.error}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -128,3 +135,4 @@ export default function BulkUpload() {
     </div>
   );
 }
+export default BulkUpload;

@@ -1,6 +1,9 @@
 import api from './api';
+import type { AttendanceRecord as TypedAttendanceRecord, AttendanceWindow } from '../types';
 
 const API = '/api/attendance';
+
+export type { TypedAttendanceRecord as AttendanceRecordTyped, AttendanceWindow };
 
 export interface AttendanceRecord {
   studentId: string;
@@ -161,3 +164,7 @@ export async function getAttendanceFlagStats() {
   const res = await api.get(`${API}/flags/stats`);
   return res.data;
 }
+
+export const checkInStudent = studentCheckIn;
+export const updateAttendanceRecord = updateAttendance;
+export const getExcusedAttendance = getExcusedRecords;
