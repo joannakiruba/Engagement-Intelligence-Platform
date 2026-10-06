@@ -7,6 +7,7 @@ import {
   bulkMarkAttendanceSchema,
   updateAttendanceSchema,
   createWindowSchema,
+  resolveFlagSchema,
 } from '../validators/attendance.validator';
 import {
   checkInHandler,
@@ -23,6 +24,9 @@ import {
   createWindowHandler,
   getSessionWindowsHandler,
   getExcusedRecordsHandler,
+  getFlagsHandler,
+  resolveFlagHandler,
+  getFlagStatsHandler,
 } from '../controllers/attendance.controller';
 
 const router = Router();
@@ -66,5 +70,10 @@ router.get('/window/:windowId/qr', requirePermission('attendance:mark:batch'), g
 
 // Get all excused records for trainer review (?batchId=&sessionId=&from=&to=)
 router.get('/excused', requirePermission('attendance:read:batch', 'attendance:read:any'), getExcusedRecordsHandler);
+
+// Attendance fraud flags (admin)
+router.get('/flags', requirePermission('attendance:read:any'), getFlagsHandler);
+router.get('/flags/stats', requirePermission('attendance:read:any'), getFlagStatsHandler);
+router.put('/flags/:id', requirePermission('attendance:update:any'), validate(resolveFlagSchema), resolveFlagHandler);
 
 export default router;

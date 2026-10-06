@@ -111,7 +111,53 @@ export async function getExcusedRecords(
 
 // --- Student check-in ---
 
-export async function studentCheckIn(windowId: string, qrToken?: string) {
-  const res = await api.post(`${API}/check-in`, { windowId, qrToken });
+export async function studentCheckIn(
+  windowId: string,
+  qrToken: string,
+  extra?: { bssid?: string; ssid?: string }
+) {
+  const res = await api.post(`${API}/check-in`, { windowId, qrToken, ...extra });
+  return res.data;
+}
+
+// --- Attendance flags (admin) ---
+
+export interface AttendanceFlagItem {
+  id: string;
+  attendanceId: string;
+  studentId: string;
+  reason: string;
+  details: string | null;
+  status: string;
+  reviewedBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  student: { id: string; name: string; email: string };
+  attendance: {
+    id: string;
+    windowId: string;
+    studentIp: string | null;
+    networkFingerprint: string | null;
+    checkInTime: string | null;
+    session: { id: string; title: string; scheduledDate: string };
+    window: { id: string; label: string; trainerIp: string | null; networkFingerprint: string | null };
+  };
+  reviewer: { id: string; name: string } | null;
+}
+
+export async function getAttendanceFlags(
+  params?: { status?: string; batchId?: string; from?: string; to?: string }
+) {
+  const res = await api.get(`${API}/flags`, { params });
+  return res.data;
+}
+
+export async function resolveAttendanceFlag(flagId: string, status: 'CONFIRMED_FRAUD' | 'DISMISSED') {
+  const res = await api.put(`${API}/flags/${flagId}`, { status });
+  return res.data;
+}
+
+export async function getAttendanceFlagStats() {
+  const res = await api.get(`${API}/flags/stats`);
   return res.data;
 }

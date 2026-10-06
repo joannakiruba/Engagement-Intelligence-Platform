@@ -60,6 +60,19 @@ enum ProofStatus {
   REJECTED
 }
 
+enum FlagReason {
+  IP_MISMATCH
+  DEVICE_CONFLICT
+  DEVICE_RESET
+  MANUAL
+}
+
+enum FlagStatus {
+  PENDING
+  CONFIRMED_FRAUD
+  DISMISSED
+}
+
 enum DeadlineType {
   FIXED
   TENTATIVE
@@ -142,6 +155,10 @@ model User {
   trainerBatches BatchTrainer[]
 
   attendances Attendance[]
+
+  deviceTokens    DeviceToken[]
+  attendanceFlags AttendanceFlag[]
+  flagsReviewed   AttendanceFlag[] @relation("FlagReviewer")
 
   assessmentResults AssessmentResult[]
 
@@ -268,6 +285,9 @@ model AttendanceWindow {
   startTime DateTime
   endTime   DateTime
 
+  trainerIp          String?
+  networkFingerprint String?
+
   createdAt DateTime @default(now())
 
   session     Session      @relation(fields: [sessionId], references: [id])
@@ -287,6 +307,10 @@ model Attendance {
 
   checkInTime DateTime?
 
+  studentIp          String?
+  networkFingerprint String?
+  deviceTokenId      String?
+
   remarks String?
 
   createdAt DateTime @default(now())
@@ -294,11 +318,53 @@ model Attendance {
   window  AttendanceWindow @relation(fields: [windowId], references: [id])
   session Session          @relation(fields: [sessionId], references: [id])
   student User             @relation(fields: [studentId], references: [id])
+  flags   AttendanceFlag[]
 
   @@unique([windowId, studentId])
   @@index([studentId])
   @@index([sessionId])
   @@map("attendance")
+}
+
+model DeviceToken {
+  id String @id @default(uuid())
+
+  tokenHash String @unique
+
+  studentId String
+
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("device_tokens")
+}
+
+model AttendanceFlag {
+  id String @id @default(uuid())
+
+  attendanceId String
+  studentId    String
+
+  reason  FlagReason
+  details String?
+
+  status     FlagStatus @default(PENDING)
+  reviewedBy String?
+  resolvedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  attendance Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  student    User       @relation(fields: [studentId], references: [id])
+  reviewer   User?      @relation("FlagReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([studentId])
+  @@index([status])
+  @@map("attendance_flags")
 }
 
 model Assessment {

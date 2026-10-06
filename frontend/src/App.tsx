@@ -25,6 +25,7 @@ import QRFullscreen from "./pages/attendance/QRFullscreen";
 import StudentCheckIn from "./pages/attendance/StudentCheckIn";
 import AttendanceReport from "./pages/attendance/AttendanceReport";
 import ExcusedReview from "./pages/attendance/ExcusedReview";
+import FlagReview from "./pages/attendance/FlagReview";
 import FeedbackList from "./pages/feedback/FeedbackList";
 import FeedbackForm from "./pages/feedback/FeedbackForm";
 import FeedbackDetail from "./pages/feedback/FeedbackDetail";
@@ -66,6 +67,10 @@ function getNavLinks(role: string): { label: string; to: string }[] {
     links.push({ label: "Check In", to: "/attendance/check-in" });
   } else if (["TRAINER", "ADMIN"].includes(role)) {
     links.push({ label: "Attendance", to: "/attendance/excused" });
+  }
+
+  if (role === "ADMIN") {
+    links.push({ label: "Flags", to: "/attendance/flags" });
   }
 
   if (role !== "COORDINATOR") {
@@ -783,6 +788,16 @@ function AppRoutes() {
               <RequireAuth>
                 <RequireRole roles={["TRAINER", "ADMIN"]}>
                   <ExcusedReview />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/attendance/flags"
+            element={
+              <RequireAuth>
+                <RequireRole roles={["ADMIN"]}>
+                  <FlagReview />
                 </RequireRole>
               </RequireAuth>
             }

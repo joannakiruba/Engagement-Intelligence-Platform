@@ -29,6 +29,8 @@ import eventRegistrationRoutes from './routes/event-registrations.routes';
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 app.use(cors({
   origin: config.frontendUrl,
   credentials: true,

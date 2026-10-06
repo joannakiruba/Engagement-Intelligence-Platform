@@ -3,7 +3,10 @@ import Joi from 'joi';
 export const checkInSchema = Joi.object({
   windowId: Joi.string().uuid().required()
     .messages({ 'string.guid': 'windowId must be a valid UUID' }),
-  qrToken: Joi.string().min(1).optional(),
+  qrToken: Joi.string().min(1).required()
+    .messages({ 'any.required': 'QR token is required — please scan the QR code' }),
+  bssid: Joi.string().max(64).optional(),
+  ssid: Joi.string().max(128).optional(),
 });
 
 export const markAttendanceSchema = Joi.object({
@@ -45,4 +48,9 @@ export const createWindowSchema = Joi.object({
   startTime: Joi.date().iso().optional(),
   endTime: Joi.date().iso().optional()
     .when('startTime', { is: Joi.exist(), then: Joi.date().iso().greater(Joi.ref('startTime')).messages({ 'date.greater': 'endTime must be after startTime' }) }),
+});
+
+export const resolveFlagSchema = Joi.object({
+  status: Joi.string().valid('CONFIRMED_FRAUD', 'DISMISSED').required()
+    .messages({ 'any.only': 'status must be CONFIRMED_FRAUD or DISMISSED' }),
 });
