@@ -12,6 +12,11 @@ const fns = {
   userFindUnique: jest.fn(),
 };
 
+jest.mock("../auth/rbac.middleware", () => ({
+  requirePermission: () => (_req: any, _res: any, next: any) => next(),
+  resolveScope: () => (_req: any, _res: any, next: any) => next(),
+}));
+
 jest.mock("../lib/prisma", () => ({
   __esModule: true,
   default: {

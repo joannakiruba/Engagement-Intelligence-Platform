@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
 import { validate } from '../middleware/validate.middleware';
 import { requirePermission } from '../auth/rbac.middleware';
@@ -41,16 +41,16 @@ router.post(
   '/generate',
   requirePermission('risk_scores:calculate:any', 'risk_scores:calculate:batch'),
   validate(generateSchema),
-  async (req: Request, res: Response): Promise<void> => {
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try { const result = await generateMentorAlerts(req.body.batchId); sendSuccess(res, result, 201); }
-    catch (err) { sendError(res, 'Failed to generate mentor alerts. ML service may be unavailable.', 503); }
+    catch (err) { next(err); }
   },
 );
 
 router.get(
   '/mentor/:mentorId',
   requirePermission('interventions:read:assigned', 'interventions:read:any'),
-  async (req: Request, res: Response): Promise<void> => {
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const mentorId = Array.isArray(req.params.mentorId) ? req.params.mentorId[0] : req.params.mentorId;
       const userId = req.user!.sub;
@@ -64,14 +64,14 @@ router.get(
 
       const alerts = await getMentorAlerts(mentorId);
       sendSuccess(res, alerts);
-    } catch (err) { sendError(res, 'Failed to fetch mentor alerts.', 503); }
+    } catch (err) { next(err); }
   },
 );
 
 router.get(
   '/student/:studentId',
   requirePermission('interventions:read:own', 'interventions:read:assigned', 'interventions:read:any'),
-  async (req: Request, res: Response): Promise<void> => {
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : req.params.studentId;
       const userId = req.user!.sub;
@@ -92,7 +92,7 @@ router.get(
 
       const alerts = await getStudentAlerts(studentId);
       sendSuccess(res, alerts);
-    } catch (err) { sendError(res, 'Failed to fetch student alerts.', 503); }
+    } catch (err) { next(err); }
   },
 );
 
@@ -100,7 +100,7 @@ router.put(
   '/:alertId/status',
   requirePermission('interventions:create:assigned', 'interventions:read:any'),
   validate(updateStatusSchema),
-  async (req: Request, res: Response): Promise<void> => {
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const alertId = parseInt(Array.isArray(req.params.alertId) ? req.params.alertId[0] : req.params.alertId, 10);
       if (isNaN(alertId)) { sendError(res, 'Invalid alert ID.', 400); return; }
@@ -116,7 +116,7 @@ router.put(
 
       const updated = await updateAlertStatus(alertId, req.body.status);
       sendSuccess(res, updated);
-    } catch (err) { sendError(res, 'Failed to update alert status.', 503); }
+    } catch (err) { next(err); }
   },
 );
 
@@ -124,7 +124,7 @@ router.post(
   '/:alertId/outcome',
   requirePermission('interventions:create:assigned'),
   validate(outcomeSchema),
-  async (req: Request, res: Response): Promise<void> => {
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const alertId = parseInt(Array.isArray(req.params.alertId) ? req.params.alertId[0] : req.params.alertId, 10);
       if (isNaN(alertId)) { sendError(res, 'Invalid alert ID.', 400); return; }
@@ -135,16 +135,16 @@ router.post(
 
       const result = await recordAlertOutcome(alertId, req.body);
       sendSuccess(res, result, 201);
-    } catch (err) { sendError(res, 'Failed to record alert outcome.', 503); }
+    } catch (err) { next(err); }
   },
 );
 
 router.get(
   '/stats',
   requirePermission('interventions:read:any'),
-  async (_req: Request, res: Response): Promise<void> => {
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try { const stats = await getAlertStats(); sendSuccess(res, stats); }
-    catch (err) { sendError(res, 'Failed to fetch alert statistics.', 503); }
+    catch (err) { next(err); }
   },
 );
 

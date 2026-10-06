@@ -1,11 +1,29 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import Joi from 'joi';
 import prisma from '../lib/prisma';
 import { sendSuccess, sendError } from '../utils/response';
 import { requirePermission } from '../auth/rbac.middleware';
+import { validate } from '../middleware/validate.middleware';
 
 const router = Router();
 
-router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+const createEventSchema = Joi.object({
+  title: Joi.string().min(1).max(200).required(),
+  description: Joi.string().max(2000).allow(null, '').optional(),
+  eventType: Joi.string().min(1).max(100).required(),
+  eventDate: Joi.date().iso().required(),
+  registrationDeadline: Joi.date().iso().allow(null).optional(),
+});
+
+const updateEventSchema = Joi.object({
+  title: Joi.string().min(1).max(200).optional(),
+  description: Joi.string().max(2000).allow(null, '').optional(),
+  eventType: Joi.string().min(1).max(100).optional(),
+  eventDate: Joi.date().iso().optional(),
+  registrationDeadline: Joi.date().iso().allow(null).optional(),
+}).min(1);
+
+router.get('/', requirePermission('events:read:any'), async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const events = await prisma.event.findMany({
       include: {
@@ -19,7 +37,7 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id', requirePermission('events:read:any'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const event = await prisma.event.findUnique({
       where: { id: String(req.params.id) },
@@ -42,13 +60,10 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 router.post(
   '/',
   requirePermission('events:create'),
+  validate(createEventSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { title, description, eventType, eventDate, registrationDeadline } = req.body;
-
-      if (!title || !eventType || !eventDate) {
-        return sendError(res, 'title, eventType, and eventDate are required', 400);
-      }
 
       const event = await prisma.event.create({
         data: {
@@ -72,6 +87,7 @@ router.post(
 router.put(
   '/:id',
   requirePermission('events:update:any'),
+  validate(updateEventSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const existing = await prisma.event.findUnique({ where: { id: String(req.params.id) } });

@@ -156,7 +156,7 @@ describe('POST /api/mentor-alerts/generate', () => {
       .post('/api/mentor-alerts/generate')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({});
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(500);
   });
 
   it('rejects mentors (no risk_scores:calculate permission)', async () => {
@@ -210,7 +210,7 @@ describe('GET /api/mentor-alerts/mentor/:mentorId', () => {
     const res = await request(app)
       .get('/api/mentor-alerts/mentor/mentor-1')
       .set('Authorization', `Bearer ${mentorToken}`);
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(500);
   });
 });
 
@@ -254,7 +254,7 @@ describe('GET /api/mentor-alerts/student/:studentId', () => {
     const res = await request(app)
       .get('/api/mentor-alerts/student/student-1')
       .set('Authorization', `Bearer ${studentToken}`);
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(500);
   });
 });
 
@@ -312,7 +312,7 @@ describe('PUT /api/mentor-alerts/:alertId/status', () => {
       .put('/api/mentor-alerts/1/status')
       .set('Authorization', `Bearer ${mentorToken}`)
       .send({ status: 'seen' });
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(500);
   });
 });
 
@@ -383,7 +383,7 @@ describe('POST /api/mentor-alerts/:alertId/outcome', () => {
       .post('/api/mentor-alerts/1/outcome')
       .set('Authorization', `Bearer ${mentorToken}`)
       .send(validOutcome);
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(500);
   });
 });
 
@@ -415,7 +415,7 @@ describe('GET /api/mentor-alerts/stats', () => {
     const res = await request(app)
       .get('/api/mentor-alerts/stats')
       .set('Authorization', `Bearer ${adminToken}`);
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(500);
   });
 
   it('rejects non-admin users', async () => {

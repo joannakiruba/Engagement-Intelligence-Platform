@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { validate } from "../middleware/validate.middleware";
+import { requirePermission, resolveScope } from "../auth/rbac.middleware";
 import {
   createBatchSchema,
   updateBatchSchema,
@@ -26,24 +27,24 @@ import {
 const router = Router();
 
 // Batch CRUD
-router.post("/", validate(createBatchSchema), createBatchHandler);
-router.get("/", listBatchesHandler);
-router.get("/:id", getBatchHandler);
-router.put("/:id", validate(updateBatchSchema), updateBatchHandler);
-router.delete("/:id", deleteBatchHandler);
+router.post("/", requirePermission('batches:create'), validate(createBatchSchema), createBatchHandler);
+router.get("/", requirePermission('batches:read:own', 'batches:read:assigned', 'batches:read:any'), resolveScope('batches:read'), listBatchesHandler);
+router.get("/:id", requirePermission('batches:read:own', 'batches:read:assigned', 'batches:read:any'), getBatchHandler);
+router.put("/:id", requirePermission('batches:update:any'), validate(updateBatchSchema), updateBatchHandler);
+router.delete("/:id", requirePermission('batches:update:any'), deleteBatchHandler);
 
 // Roster (Students)
-router.get("/:id/roster", getRosterHandler);
-router.post("/:id/students", validate(assignStudentSchema), addStudentHandler);
-router.delete("/:id/students/:studentId", removeStudentHandler);
+router.get("/:id/roster", requirePermission('batches:read:own', 'batches:read:assigned', 'batches:read:any'), getRosterHandler);
+router.post("/:id/students", requirePermission('batches:update:any'), validate(assignStudentSchema), addStudentHandler);
+router.delete("/:id/students/:studentId", requirePermission('batches:update:any'), removeStudentHandler);
 
 // Trainers
-router.get("/:id/trainers", getTrainersHandler);
-router.post("/:id/trainers", validate(assignTrainerSchema), assignTrainerHandler);
-router.delete("/:id/trainers/:trainerId", removeTrainerHandler);
+router.get("/:id/trainers", requirePermission('batches:read:own', 'batches:read:assigned', 'batches:read:any'), getTrainersHandler);
+router.post("/:id/trainers", requirePermission('batches:update:any'), validate(assignTrainerSchema), assignTrainerHandler);
+router.delete("/:id/trainers/:trainerId", requirePermission('batches:update:any'), removeTrainerHandler);
 
 // Batch-scoped sessions
-router.get("/:id/sessions", listSessionsHandler);
-router.post("/:id/sessions", validate(createSessionSchema), createSessionHandler);
+router.get("/:id/sessions", requirePermission('sessions:read:own', 'sessions:read:assigned', 'sessions:read:any'), listSessionsHandler);
+router.post("/:id/sessions", requirePermission('sessions:create:batch'), validate(createSessionSchema), createSessionHandler);
 
 export default router;

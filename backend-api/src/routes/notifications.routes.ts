@@ -53,6 +53,18 @@ router.get(
 );
 
 router.patch(
+  '/mark-all-read',
+  requirePermission('notifications:read:own'),
+  async (req: Request, res: Response): Promise<void> => {
+    await prisma.notification.updateMany({
+      where: { userId: req.user!.sub, isRead: false },
+      data: { isRead: true },
+    });
+    sendSuccess(res, { success: true });
+  },
+);
+
+router.patch(
   '/:id/read',
   requirePermission('notifications:read:own'),
   async (req: Request, res: Response): Promise<void> => {
@@ -67,18 +79,6 @@ router.patch(
       data: { isRead: true },
     });
     sendSuccess(res, updated);
-  },
-);
-
-router.patch(
-  '/mark-all-read',
-  requirePermission('notifications:read:own'),
-  async (req: Request, res: Response): Promise<void> => {
-    await prisma.notification.updateMany({
-      where: { userId: req.user!.sub, isRead: false },
-      data: { isRead: true },
-    });
-    sendSuccess(res, { success: true });
   },
 );
 

@@ -34,32 +34,66 @@ export async function createBatch(input: CreateBatchInput) {
   });
 }
 
-export async function listBatches() {
-  const batches = await prisma.batch.findMany({
-    include: {
-      _count: {
-        select: {
-          members: true,
-          trainers: true,
-          sessions: true,
+interface ListBatchesParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  department?: string;
+  scopedBatchIds?: string[] | 'all';
+}
+
+export async function listBatches(params: ListBatchesParams = {}) {
+  const { page = 1, limit = 20, search, department, scopedBatchIds = 'all' } = params;
+
+  const where: any = {};
+
+  if (scopedBatchIds !== 'all') {
+    where.id = { in: scopedBatchIds };
+  }
+
+  if (search) {
+    where.name = { contains: search, mode: 'insensitive' };
+  }
+  if (department) {
+    where.department = { contains: department, mode: 'insensitive' };
+  }
+
+  const [batches, total] = await Promise.all([
+    prisma.batch.findMany({
+      where,
+      include: {
+        _count: {
+          select: {
+            members: true,
+            trainers: true,
+            sessions: true,
+          },
         },
       },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.batch.count({ where }),
+  ]);
 
-  return batches.map((b) => ({
-    id: b.id,
-    name: b.name,
-    department: b.department,
-    startDate: b.startDate,
-    endDate: b.endDate,
-    description: b.description,
-    createdAt: b.createdAt,
-    memberCount: b._count.members,
-    trainerCount: b._count.trainers,
-    sessionCount: b._count.sessions,
-  }));
+  return {
+    batches: batches.map((b) => ({
+      id: b.id,
+      name: b.name,
+      department: b.department,
+      startDate: b.startDate,
+      endDate: b.endDate,
+      description: b.description,
+      createdAt: b.createdAt,
+      memberCount: b._count.members,
+      trainerCount: b._count.trainers,
+      sessionCount: b._count.sessions,
+    })),
+    total,
+    page,
+    limit,
+  };
 }
 
 export async function getBatchById(id: string) {
@@ -188,9 +222,15 @@ export async function addStudent(batchId: string, studentId: string) {
     throw new ServiceError("Batch not found", 404);
   }
 
-  const student = await prisma.user.findUnique({ where: { id: studentId } });
+  const student = await prisma.user.findUnique({
+    where: { id: studentId },
+    include: { role: { select: { name: true } } },
+  });
   if (!student) {
     throw new ServiceError("Student not found", 404);
+  }
+  if (student.role.name !== "STUDENT") {
+    throw new ServiceError("User is not a student. Only users with the STUDENT role can be added to a batch roster.", 400);
   }
 
   const existing = await prisma.batchMember.findUnique({
@@ -259,9 +299,15 @@ export async function assignTrainer(batchId: string, trainerId: string) {
     throw new ServiceError("Batch not found", 404);
   }
 
-  const trainer = await prisma.user.findUnique({ where: { id: trainerId } });
+  const trainer = await prisma.user.findUnique({
+    where: { id: trainerId },
+    include: { role: { select: { name: true } } },
+  });
   if (!trainer) {
     throw new ServiceError("Trainer not found", 404);
+  }
+  if (trainer.role.name !== "TRAINER") {
+    throw new ServiceError("User is not a trainer. Only users with the TRAINER role can be assigned to a batch.", 400);
   }
 
   const existing = await prisma.batchTrainer.findUnique({

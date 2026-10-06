@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { validate } from '../middleware/validate.middleware';
+import { requirePermission } from '../auth/rbac.middleware';
 import prisma from '../lib/prisma';
 import { sendSuccess, sendError } from '../utils/response';
 
@@ -20,7 +21,7 @@ const createAssignmentSchema = Joi.object({
 
 // ── GET / — List mentor assignments (filterable by mentorId, studentId) ──
 
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', requirePermission('mentor_assignments:read:own', 'mentor_assignments:read:any'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { mentorId, studentId } = req.query;
 
@@ -45,7 +46,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 
 // ── GET /:id — Get single assignment ──
 
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', requirePermission('mentor_assignments:read:own', 'mentor_assignments:read:any'), async (req: Request, res: Response): Promise<void> => {
   try {
     const assignment = await prisma.mentorAssignment.findUnique({
       where: { id: paramId(req) },
@@ -68,7 +69,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 
 // ── POST / — Create a mentor-student assignment ──
 
-router.post('/', validate(createAssignmentSchema), async (req: Request, res: Response): Promise<void> => {
+router.post('/', requirePermission('mentor_assignments:create'), validate(createAssignmentSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const { mentorId, studentId } = req.body;
 
@@ -104,7 +105,7 @@ router.post('/', validate(createAssignmentSchema), async (req: Request, res: Res
 
 // ── DELETE /:id — Remove a mentor-student assignment ──
 
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', requirePermission('mentor_assignments:create'), async (req: Request, res: Response): Promise<void> => {
   try {
     const existing = await prisma.mentorAssignment.findUnique({ where: { id: paramId(req) } });
     if (!existing) {
