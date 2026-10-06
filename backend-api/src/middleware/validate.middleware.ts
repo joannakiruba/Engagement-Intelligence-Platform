@@ -14,7 +14,12 @@ export function validate(schema: Joi.ObjectSchema, property: 'body' | 'query' | 
       return;
     }
 
-    req[property] = value;
+    if (property === 'query') {
+      // Express 5 makes req.query getter-only; store validated result separately
+      (req as any).validatedQuery = value;
+    } else {
+      req[property] = value;
+    }
     next();
   };
 }
@@ -33,7 +38,11 @@ export function validateStrict(schema: Joi.ObjectSchema, property: 'body' | 'que
       return;
     }
 
-    req[property] = value;
+    if (property === 'query') {
+      (req as any).validatedQuery = value;
+    } else {
+      req[property] = value;
+    }
     next();
   };
 }
