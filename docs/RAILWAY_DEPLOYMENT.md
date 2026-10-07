@@ -2,6 +2,8 @@
 
 The repository contains three deployable Railway services: `frontend`, `backend-api`, and `ml-service`. Each service has its own Dockerfile and Railway config. The API image can also run the existing background worker as a separate optional Railway service; deploy that worker to preserve queued email, alert, and scheduled-job processing.
 
+The root package is an orchestration package, not an npm workspace: backend and frontend dependencies are installed from their own lockfiles. In particular, Prisma CLI is intentionally a backend build-time devDependency. Any build from the monorepo root must install `backend-api` dependencies with devDependencies included before invoking its Prisma script.
+
 ## Create GitHub-connected services
 
 Create one Railway project connected to this GitHub repository and the same environment (for example, `production`). For each service, use the same repository and branch, then set:
@@ -14,6 +16,8 @@ Create one Railway project connected to this GitHub repository and the same envi
 | Worker (recommended) | `/backend-api` | `/backend-api/railway.worker.json` | Do not generate a public domain | `/health` |
 
 Railway deploys each service on GitHub changes to the connected branch. The dashboard's root directory is a per-service setting; the source directories are isolated during builds. Railway currently marks `railway.json` config-as-code as deprecated and says newly created services cannot opt into it, so the JSON files in this repo document settings for legacy services; for new services, apply the same Dockerfile, health-check, restart, and worker start-command settings in each service's dashboard. The ML service should only be reachable through Railway private networking. Do not enable public networking for it.
+
+For the API, the simplest supported build is root directory `/backend-api`, Dockerfile `Dockerfile`, and no custom build command. Its Dockerfile runs `npm ci --include=dev`, generates Prisma Client, compiles TypeScript, then prunes devDependencies from the runtime image. If you intentionally build from the repository root with Railpack, set the Build Command to `npm run railway:build:backend` (not the bare `npm run prisma:generate --prefix backend-api`).
 
 ## Configure environment variables
 
@@ -65,6 +69,7 @@ For GitHub-based deployment, connect each Railway service to the repository/bran
 - Health check path: `/health` for each service.
 - Restart policy: on failure, up to 10 retries.
 - Worker start command: `npm run start:worker`; keep the worker private and always running.
+- If building the API from the monorepo root instead of its Dockerfile, use `npm run railway:build:backend`. That command installs the backend lockfile with dev tools before Prisma generation and compilation.
 
 To deploy the current checkout with the Railway CLI instead, authenticate once with `railway login`, then link each service and run `railway up` from its service directory:
 

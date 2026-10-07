@@ -3,11 +3,11 @@ FROM node:20-slim AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 COPY tsconfig.json ./
 COPY src ./src
-RUN npx prisma generate --schema=src/prisma/schema.prisma && npm run build && npm prune --omit=dev
+RUN npm run prisma:generate -- --schema=src/prisma/schema.prisma && npm run build && npm prune --omit=dev
 
 FROM node:20-slim AS runtime
 
