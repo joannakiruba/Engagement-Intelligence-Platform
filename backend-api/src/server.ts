@@ -36,7 +36,11 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(cors({
-  origin: config.frontendUrl,
+  origin: (origin, callback) => {
+    // Requests without Origin are server-to-server or same-host tools; browsers
+    // must match one of the explicitly configured Firebase/custom site origins.
+    callback(null, !origin || config.frontendUrls.includes(origin));
+  },
   credentials: true,
 }));
 
@@ -90,31 +94,6 @@ app.use(errorHandler);
 if (require.main === module) {
   const server = app.listen(config.port, () => {
     logger.info(`Server running on port ${config.port} (${config.nodeEnv})`);
-  });
-
-  // Start BullMQ workers in background — non-blocking, server works without Redis
-  const workerNames = ['email', 'alert', 'weekly-report', 'overdue-check'];
-  Promise.allSettled([
-    import('./jobs/email.job.js'),
-    import('./jobs/alert.job.js'),
-    import('./jobs/weekly-report.job.js').then((mod) => mod.initWeeklyReportSchedule()),
-    import('./jobs/overdue-check.job.js').then((m) => m.startOverdueSchedule()),
-  ]).then((results) => {
-    const failures = results
-      .map((r, i) => (r.status === 'rejected' ? { name: workerNames[i], error: r.reason as Error } : null))
-      .filter(Boolean) as { name: string; error: Error }[];
-
-    if (failures.length === 0) {
-      logger.info('BullMQ workers initialized');
-    } else {
-      for (const f of failures) {
-        logger.error(`BullMQ worker "${f.name}" failed to start`, { error: f.error.message });
-      }
-      if (failures.length < workerNames.length) {
-        const started = workerNames.filter((_, i) => results[i].status === 'fulfilled');
-        logger.info('BullMQ workers partially initialized', { started, failed: failures.map(f => f.name) });
-      }
-    }
   });
 
   // Graceful shutdown

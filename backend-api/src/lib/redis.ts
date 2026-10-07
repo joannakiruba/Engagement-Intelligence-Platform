@@ -1,8 +1,14 @@
-import Redis from 'ioredis';
+import Redis, { RedisOptions } from 'ioredis';
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+export function createRedisConnection(options: RedisOptions = {}): Redis {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) {
+    throw new Error('Missing required environment variable: REDIS_URL');
+  }
+  return new Redis(redisUrl, options);
+}
 
-const redis = new Redis(redisUrl, {
+const redis = createRedisConnection({
   maxRetriesPerRequest: 3,
   lazyConnect: true,
 });

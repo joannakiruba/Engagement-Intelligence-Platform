@@ -1,0 +1,51 @@
+{
+  "hosting": {
+    "public": "frontend/dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api{,/**}",
+        "run": {
+          "serviceId": "eip-api",
+          "region": "asia-south1"
+        }
+      },
+      {
+        "source": "/auth{,/**}",
+        "run": {
+          "serviceId": "eip-api",
+          "region": "asia-south1"
+        }
+      },
+      {
+        "source": "/users{,/**}",
+        "run": {
+          "serviceId": "eip-api",
+          "region": "asia-south1"
+        }
+      },
+      {
+        "source": "/admin/users{,/**}",
+        "run": {
+          "serviceId": "eip-api",
+          "region": "asia-south1"
+        }
+      },
+      {
+        "source": "/health",
+        "run": {
+          "serviceId": "eip-api",
+          "region": "asia-south1"
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

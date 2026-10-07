@@ -1,25 +1,11 @@
-import { Worker, Queue, Job } from 'bullmq';
-import Redis from 'ioredis';
-import { config } from '../config';
+import { Worker, Job } from 'bullmq';
+import { createRedisConnection } from '../lib/redis';
 import { logger } from '../utils/logger';
 import prisma from '../lib/prisma';
+import { overdueCheckQueue } from './queue';
 
-const redisConnection = new Redis({
-  host: config.redis.host,
-  port: config.redis.port,
-  password: config.redis.password,
-  db: config.redis.db,
+const redisConnection = createRedisConnection({
   maxRetriesPerRequest: null,
-});
-
-export const overdueCheckQueue = new Queue('overdue-check', {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 2,
-    backoff: { type: 'exponential', delay: 5000 },
-    removeOnComplete: { count: 20, age: 24 * 60 * 60 },
-    removeOnFail: { count: 50, age: 7 * 24 * 60 * 60 },
-  },
 });
 
 export const overdueCheckWorker = new Worker(
@@ -113,11 +99,7 @@ overdueCheckWorker.on('failed', (job, error) => {
   });
 });
 
-export async function startOverdueSchedule(): Promise<void> {
-  await overdueCheckQueue.upsertJobScheduler(
-    'overdue-check-scheduler',
-    { every: 60 * 60 * 1000 },
-    { name: 'overdue-check' },
-  );
-  logger.info('Overdue check scheduled: every 60 minutes');
+export async function closeOverdueCheckWorker(): Promise<void> {
+  await overdueCheckWorker.close();
+  if (redisConnection.status !== 'end') await redisConnection.quit();
 }

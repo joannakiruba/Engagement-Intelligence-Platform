@@ -11,6 +11,14 @@ function requireEnv(key: string): string {
   return value;
 }
 
+const frontendUrl = process.env.FRONTEND_URL || (
+  process.env.NODE_ENV === 'production' ? requireEnv('FRONTEND_URL') : 'http://localhost:5173'
+);
+const frontendUrls = [...new Set([
+  frontendUrl,
+  ...(process.env.FRONTEND_URLS || '').split(';').map((url) => url.trim()).filter(Boolean),
+])];
+
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -30,14 +38,8 @@ export const config = {
 
   tokenHashSecret: requireEnv('TOKEN_HASH_SECRET'),
 
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
-
-  redis: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379', 10),
-    password: process.env.REDIS_PASSWORD || undefined,
-    db: parseInt(process.env.REDIS_DB || '0', 10),
-  },
+  frontendUrl,
+  frontendUrls,
 
   email: {
     smtpHost: process.env.SMTP_HOST,

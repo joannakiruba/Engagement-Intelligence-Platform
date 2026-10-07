@@ -4,12 +4,17 @@ import asyncpg
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import DATABASE_URL, PORT
+from app.config import DATABASE_URL, DB_POOL_MAX_SIZE, DB_POOL_MIN_SIZE, ML_CORS_ORIGINS, PORT
 from app.routes.health import router as health_router
 from app.routes.risk import router as risk_router
 from app.mentor_alerts.routes import router as mentor_alerts_router, set_pool
 from app.risk_engine.calculator import load_model
 from app.utils.logger import logger
+
+from dotenv import load_dotenv
+
+# Load the environment variables from the .env file
+load_dotenv()
 
 
 @asynccontextmanager
@@ -20,7 +25,14 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("ML model not available — predictions will return NOT_READY")
 
-    pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL must be configured for the ML service")
+
+    pool = await asyncpg.create_pool(
+        DATABASE_URL,
+        min_size=DB_POOL_MIN_SIZE,
+        max_size=DB_POOL_MAX_SIZE,
+    )
     app.state.db_pool = pool
     set_pool(pool)
     yield
@@ -36,8 +48,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=ML_CORS_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

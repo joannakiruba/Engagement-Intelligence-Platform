@@ -1,5 +1,9 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load the environment variables from the .env file
+load_dotenv()
 
 MODEL_DIR = Path(os.getenv("MODEL_DIR", str(Path(__file__).resolve().parent.parent / "models")))
 MODEL_PATH = MODEL_DIR / "risk_model.joblib"
@@ -18,10 +22,17 @@ FEATURE_VERSION = "1.0"
 RISK_CLASSES = ["HIGH", "LOW", "MEDIUM"]
 
 HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8000"))
+PORT = int(os.getenv("PORT", "8080"))
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/hope_platform")
-NODE_API_URL = os.getenv("NODE_API_URL", "http://localhost:3000")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+DB_POOL_MIN_SIZE = int(os.getenv("DB_POOL_MIN_SIZE", "1"))
+DB_POOL_MAX_SIZE = int(os.getenv("DB_POOL_MAX_SIZE", "5"))
+NODE_API_URL = os.getenv("NODE_API_URL", "")
+ML_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ML_CORS_ORIGINS", "").split(";")
+    if origin.strip()
+]
 
 RISK_THRESHOLDS = {
     "low_max": 30,

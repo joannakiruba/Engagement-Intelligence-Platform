@@ -1,17 +1,12 @@
 import { Worker, Job } from 'bullmq';
-import Redis from 'ioredis';
-import { config } from '../config';
+import { createRedisConnection } from '../lib/redis';
 import { logger } from '../utils/logger';
 import { sendMentorAlert } from '../services/email.service';
 import { generateMentorAlerts } from '../services/ml.service';
 import prisma from '../lib/prisma';
 import type { MentorAlertJob } from './queue';
 
-const redisConnection = new Redis({
-  host: config.redis.host,
-  port: config.redis.port,
-  password: config.redis.password,
-  db: config.redis.db,
+const redisConnection = createRedisConnection({
   maxRetriesPerRequest: null,
 });
 
@@ -75,6 +70,11 @@ mentorAlertWorker.on('error', (error) => {
 });
 
 logger.info('Mentor alert worker started');
+
+export async function closeMentorAlertWorker(): Promise<void> {
+  await mentorAlertWorker.close();
+  if (redisConnection.status !== 'end') await redisConnection.quit();
+}
 
 // ML-driven smart alert pipeline (Module 14)
 export async function processMentorAlertJob(job: Job): Promise<void> {

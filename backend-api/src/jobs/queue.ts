@@ -1,14 +1,9 @@
-import { Queue, QueueOptions } from 'bullmq';
-import Redis from 'ioredis';
-import { config } from '../config';
+import { Job, Queue, QueueOptions } from 'bullmq';
+import { createRedisConnection } from '../lib/redis';
 import { logger } from '../utils/logger';
 
 // Create Redis connection
-const redisConnection = new Redis({
-  host: config.redis.host,
-  port: config.redis.port,
-  password: config.redis.password,
-  db: config.redis.db,
+const redisConnection = createRedisConnection({
   maxRetriesPerRequest: null, // Required for BullMQ
   retryStrategy: (times: number) => {
     const delay = Math.min(times * 50, 2000);
@@ -63,7 +58,16 @@ export const weeklyReportQueue = new Queue('weekly-report', defaultQueueOptions)
 logger.info('BullMQ queues initialized');
 
 // Overdue-check queue for intervention task deadline monitoring
-export const overdueCheckQueue = new Queue('overdue-check', defaultQueueOptions);
+export const overdueCheckQueue = new Queue('overdue-check', {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    ...defaultQueueOptions.defaultJobOptions,
+    attempts: 2,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: { count: 20, age: 24 * 60 * 60 },
+    removeOnFail: { count: 50, age: 7 * 24 * 60 * 60 },
+  },
+});
 
 // Graceful shutdown
 export async function closeQueues(): Promise<void> {
@@ -75,6 +79,13 @@ export async function closeQueues(): Promise<void> {
     redisConnection.quit(),
   ]);
   logger.info('All queues closed');
+}
+
+/** Enqueue at most one overdue scan per UTC hour, including Scheduler retries. */
+export async function enqueueOverdueCheck(scheduledAt?: Date): Promise<Job> {
+  const referenceTime = scheduledAt?.getTime() ?? Date.now();
+  const hourBucket = Math.floor(referenceTime / (60 * 60 * 1000));
+  return overdueCheckQueue.add('overdue-check', {}, { jobId: `overdue-check-${hourBucket}` });
 }
 
 // Job type definitions

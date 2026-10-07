@@ -7,7 +7,7 @@
     "contact": { "name": "EIP Team" }
   },
   "servers": [
-    { "url": "http://localhost:3000", "description": "Local development" }
+    { "url": "/", "description": "Current host" }
   ],
   "tags": [
     { "name": "Auth", "description": "Authentication & account lifecycle" },

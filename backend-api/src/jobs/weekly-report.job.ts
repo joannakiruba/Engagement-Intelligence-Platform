@@ -1,17 +1,11 @@
 import { Worker, Job } from 'bullmq';
-import Redis from 'ioredis';
-import { config } from '../config';
+import { createRedisConnection } from '../lib/redis';
 import { logger } from '../utils/logger';
 import { sendWeeklyReport } from '../services/email.service';
 import { generateWeeklyReportData } from '../services/weekly-report.service';
-import { weeklyReportQueue } from './queue';
 import type { WeeklyReportJob } from './queue';
 
-const redisConnection = new Redis({
-  host: config.redis.host,
-  port: config.redis.port,
-  password: config.redis.password,
-  db: config.redis.db,
+const redisConnection = createRedisConnection({
   maxRetriesPerRequest: null,
 });
 
@@ -91,24 +85,9 @@ weeklyReportWorker.on('error', (error) => {
   logger.error('Weekly report worker error', { error: error.message });
 });
 
-export async function initWeeklyReportSchedule(): Promise<void> {
-  if (!config.weeklyReport.enabled) {
-    logger.info('Weekly report scheduling disabled');
-    return;
-  }
-
-  const cron = `0 ${config.weeklyReport.hour} * * ${config.weeklyReport.dayOfWeek}`;
-
-  await weeklyReportQueue.upsertJobScheduler(
-    'weekly-report-scheduler',
-    { pattern: cron },
-    {
-      name: 'weekly-report-trigger',
-      data: {},
-    },
-  );
-
-  logger.info('Weekly report schedule initialized', { cron });
+export async function closeWeeklyReportWorker(): Promise<void> {
+  await weeklyReportWorker.close();
+  if (redisConnection.status !== 'end') await redisConnection.quit();
 }
 
 logger.info('Weekly report worker started');

@@ -1,11 +1,58 @@
 import axios from 'axios';
+import { config } from '../config';
 import { logger } from '../utils/logger';
 import { MlResult } from './risk/hybrid-decision';
 import { RiskLevel } from './risk/rule-engine';
 import { StudentFeatures } from './risk/feature-builder';
 
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || '';
+const ML_SERVICE_AUDIENCE = process.env.ML_SERVICE_AUDIENCE || ML_SERVICE_URL;
+const ML_SERVICE_AUTH_MODE = process.env.ML_SERVICE_AUTH_MODE
+  || (config.isProduction ? 'cloudrun' : 'none');
 const ML_TIMEOUT_MS = parseInt(process.env.ML_TIMEOUT_MS || '5000', 10);
+
+let cachedMlIdToken: string | null = null;
+let cachedMlIdTokenExpiresAt = 0;
+let mlIdTokenRequest: Promise<string> | null = null;
+
+async function getMlAuthorizationHeaders(): Promise<Record<string, string>> {
+  if (!ML_SERVICE_URL) throw new Error('ML_SERVICE_URL must be configured');
+  if (ML_SERVICE_AUTH_MODE === 'none') return {};
+  if (ML_SERVICE_AUTH_MODE !== 'cloudrun') {
+    throw new Error(`Unsupported ML_SERVICE_AUTH_MODE: ${ML_SERVICE_AUTH_MODE}`);
+  }
+  if (!config.isProduction) return {};
+  if (!ML_SERVICE_AUDIENCE) throw new Error('ML_SERVICE_AUDIENCE must be configured');
+  if (cachedMlIdToken && cachedMlIdTokenExpiresAt > Date.now()) {
+    return { Authorization: `Bearer ${cachedMlIdToken}` };
+  }
+
+  if (!mlIdTokenRequest) {
+    const metadataUrl = new URL(
+      'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity',
+    );
+    metadataUrl.searchParams.set('audience', ML_SERVICE_AUDIENCE);
+    mlIdTokenRequest = fetch(metadataUrl, {
+      headers: { 'Metadata-Flavor': 'Google' },
+      signal: AbortSignal.timeout(3000),
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(`Cloud Run metadata server returned ${response.status}`);
+      const token = await response.text();
+      const payload = token.split('.')[1];
+      if (!payload) throw new Error('Cloud Run metadata server returned an invalid ID token');
+      const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { exp?: number };
+      cachedMlIdTokenExpiresAt = typeof claims.exp === 'number'
+        ? claims.exp * 1000 - 60_000
+        : Date.now() + 50 * 60_000;
+      cachedMlIdToken = token;
+      return token;
+    }).finally(() => {
+      mlIdTokenRequest = null;
+    });
+  }
+
+  return { Authorization: `Bearer ${await mlIdTokenRequest}` };
+}
 
 const VALID_RISK_LEVELS: RiskLevel[] = ['LOW', 'MEDIUM', 'HIGH'];
 
@@ -58,7 +105,7 @@ export async function getMlPrediction(features: StudentFeatures): Promise<MlResu
     try {
       response = await fetch(`${ML_SERVICE_URL}/api/risk/predict`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...await getMlAuthorizationHeaders() },
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
@@ -182,7 +229,8 @@ export interface AlertStats {
 export async function generateMentorAlerts(batchId?: string): Promise<GenerateAlertsResponse> {
   try {
     const response = await axios.post<GenerateAlertsResponse>(
-      `${ML_SERVICE_URL}/api/ml/mentor-alerts/generate`, { batch_id: batchId || null });
+      `${ML_SERVICE_URL}/api/ml/mentor-alerts/generate`, { batch_id: batchId || null },
+      { headers: await getMlAuthorizationHeaders() });
     return response.data;
   } catch (error) {
     logger.error('Failed to generate mentor alerts from ML service', error);
@@ -192,7 +240,9 @@ export async function generateMentorAlerts(batchId?: string): Promise<GenerateAl
 
 export async function getMentorAlerts(mentorId: string): Promise<MentorAlert[]> {
   try {
-    const response = await axios.get(`${ML_SERVICE_URL}/api/ml/mentor-alerts/mentor/${mentorId}`);
+    const response = await axios.get(`${ML_SERVICE_URL}/api/ml/mentor-alerts/mentor/${mentorId}`, {
+      headers: await getMlAuthorizationHeaders(),
+    });
     return response.data.data;
   } catch (error) {
     logger.error('Failed to fetch mentor alerts', error);
@@ -202,7 +252,9 @@ export async function getMentorAlerts(mentorId: string): Promise<MentorAlert[]> 
 
 export async function getStudentAlerts(studentId: string): Promise<MentorAlert[]> {
   try {
-    const response = await axios.get(`${ML_SERVICE_URL}/api/ml/mentor-alerts/student/${studentId}`);
+    const response = await axios.get(`${ML_SERVICE_URL}/api/ml/mentor-alerts/student/${studentId}`, {
+      headers: await getMlAuthorizationHeaders(),
+    });
     return response.data.data;
   } catch (error) {
     logger.error('Failed to fetch student alerts', error);
@@ -212,7 +264,10 @@ export async function getStudentAlerts(studentId: string): Promise<MentorAlert[]
 
 export async function updateAlertStatus(alertId: number, status: string): Promise<unknown> {
   try {
-    const response = await axios.put(`${ML_SERVICE_URL}/api/ml/mentor-alerts/${alertId}/status`, null, { params: { status } });
+    const response = await axios.put(`${ML_SERVICE_URL}/api/ml/mentor-alerts/${alertId}/status`, null, {
+      params: { status },
+      headers: await getMlAuthorizationHeaders(),
+    });
     return response.data.data;
   } catch (error) {
     logger.error('Failed to update alert status', error);
@@ -225,7 +280,10 @@ export async function recordAlertOutcome(alertId: number, data: {
   was_recommendation_followed: boolean; outcome_notes?: string;
 }): Promise<unknown> {
   try {
-    const response = await axios.post(`${ML_SERVICE_URL}/api/ml/mentor-alerts/${alertId}/outcome`, null, { params: data });
+    const response = await axios.post(`${ML_SERVICE_URL}/api/ml/mentor-alerts/${alertId}/outcome`, null, {
+      params: data,
+      headers: await getMlAuthorizationHeaders(),
+    });
     return response.data.data;
   } catch (error) {
     logger.error('Failed to record alert outcome', error);
@@ -235,7 +293,9 @@ export async function recordAlertOutcome(alertId: number, data: {
 
 export async function getAlertStats(): Promise<AlertStats> {
   try {
-    const response = await axios.get<AlertStats>(`${ML_SERVICE_URL}/api/ml/mentor-alerts/stats`);
+    const response = await axios.get<AlertStats>(`${ML_SERVICE_URL}/api/ml/mentor-alerts/stats`, {
+      headers: await getMlAuthorizationHeaders(),
+    });
     return response.data;
   } catch (error) {
     logger.error('Failed to fetch alert stats', error);

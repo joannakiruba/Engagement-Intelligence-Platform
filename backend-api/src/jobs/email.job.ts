@@ -1,15 +1,10 @@
 import { Worker, Job } from 'bullmq';
-import Redis from 'ioredis';
-import { config } from '../config';
+import { createRedisConnection } from '../lib/redis';
 import { logger } from '../utils/logger';
 import { sendActivationEmail, sendPasswordResetEmail } from '../services/email.service';
 import type { ActivationEmailJob, PasswordResetEmailJob } from './queue';
 
-const redisConnection = new Redis({
-  host: config.redis.host,
-  port: config.redis.port,
-  password: config.redis.password,
-  db: config.redis.db,
+const redisConnection = createRedisConnection({
   maxRetriesPerRequest: null,
 });
 
@@ -83,3 +78,8 @@ emailWorker.on('error', (error) => {
 });
 
 logger.info('Email worker started');
+
+export async function closeEmailWorker(): Promise<void> {
+  await emailWorker.close();
+  if (redisConnection.status !== 'end') await redisConnection.quit();
+}
