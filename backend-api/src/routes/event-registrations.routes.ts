@@ -1,3 +1,4 @@
+import { setStudentRegistrationStatus } from '../services/events.service';
 import { Router, Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
 import { sendSuccess, sendError } from '../utils/response';
@@ -8,7 +9,7 @@ const router = Router();
 // POST / — Register self for an event (student)
 router.post(
   '/',
-  requirePermission('event_registrations:create:self'),
+  requirePermission('events:update:own'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const studentId = req.user!.sub;
@@ -16,24 +17,7 @@ router.post(
 
       if (!eventId) return sendError(res, 'eventId is required', 400);
 
-      const event = await prisma.event.findUnique({ where: { id: eventId } });
-      if (!event) return sendError(res, 'Event not found', 404);
-
-      if (event.registrationDeadline && new Date() > event.registrationDeadline) {
-        return sendError(res, 'Registration deadline has passed', 400);
-      }
-
-      const existing = await prisma.eventRegistration.findUnique({
-        where: { eventId_studentId: { eventId, studentId } },
-      });
-      if (existing) return sendError(res, 'Already registered for this event', 409);
-
-      const registration = await prisma.eventRegistration.create({
-        data: { eventId, studentId },
-        include: {
-          event: { select: { id: true, title: true, eventType: true, eventDate: true } },
-        },
-      });
+      const registration = await setStudentRegistrationStatus(eventId, studentId, 'INTERESTED');
 
       return sendSuccess(res, registration, 201);
     } catch (err) {
@@ -45,15 +29,15 @@ router.post(
 // GET /my — Get own registrations (student)
 router.get(
   '/my',
-  requirePermission('event_registrations:read:own'),
+  requirePermission('events:read:own'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const registrations = await prisma.eventRegistration.findMany({
         where: { studentId: req.user!.sub },
         include: {
-          event: { select: { id: true, title: true, eventType: true, eventDate: true } },
+          event: { select: { id: true, title: true, category: true, startDate: true } },
         },
-        orderBy: { registeredAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
       });
       return sendSuccess(res, registrations);
     } catch (err) {
@@ -65,7 +49,7 @@ router.get(
 // GET / — List all registrations with optional filters (admin/coordinator)
 router.get(
   '/',
-  requirePermission('event_registrations:read:any'),
+  requirePermission('events:read:any'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const where: Record<string, unknown> = {};
@@ -75,10 +59,10 @@ router.get(
       const registrations = await prisma.eventRegistration.findMany({
         where,
         include: {
-          event: { select: { id: true, title: true, eventType: true, eventDate: true } },
+          event: { select: { id: true, title: true, category: true, startDate: true } },
           student: { select: { id: true, name: true, email: true } },
         },
-        orderBy: { registeredAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
       });
 
       return sendSuccess(res, registrations);
@@ -91,7 +75,7 @@ router.get(
 // DELETE /:id — Unregister self from an event
 router.delete(
   '/:id',
-  requirePermission('event_registrations:create:self'),
+  requirePermission('events:update:own'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const studentId = req.user!.sub;
@@ -104,7 +88,7 @@ router.delete(
         return sendError(res, 'You can only cancel your own registrations', 403);
       }
 
-      await prisma.eventRegistration.delete({ where: { id: registration.id } });
+      await setStudentRegistrationStatus(registration.eventId, studentId, 'WITHDRAWN');
       return sendSuccess(res, { message: 'Registration cancelled' });
     } catch (err) {
       next(err);

@@ -39,7 +39,7 @@ function handleUpload(fieldName: string) {
 }
 
 const PROOF_INCLUDE = {
-  event: { select: { id: true, title: true, eventType: true, eventDate: true } },
+  event: { select: { id: true, title: true, category: true, startDate: true } },
   student: { select: { id: true, name: true, email: true } },
 };
 

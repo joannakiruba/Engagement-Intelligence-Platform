@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getFeedbackList, deleteFeedback, type Feedback } from '../../services/feedback.service';
 import { useAuth } from '../../context/AuthContext';
 
-export default function FeedbackList() {
+export function FeedbackList() {
   const { user } = useAuth();
   const isTrainer = user?.role === 'TRAINER';
   const [records, setRecords] = useState<Feedback[]>([]);
@@ -19,7 +19,7 @@ export default function FeedbackList() {
       if (sessionFilter) filters.sessionId = sessionFilter;
       if (studentFilter) filters.studentId = studentFilter;
       const data = await getFeedbackList(filters);
-      setRecords(data);
+      setRecords(data || []);
       setError('');
     } catch {
       setError('Failed to load feedback records.');
@@ -42,13 +42,21 @@ export default function FeedbackList() {
 
   function ratingBadge(value: number) {
     const colors = ['', 'bg-red-100 text-red-800', 'bg-orange-100 text-orange-800', 'bg-yellow-100 text-yellow-800', 'bg-blue-100 text-blue-800', 'bg-green-100 text-green-800'];
-    return <span className={`inline-block px-2 py-0.5 rounded text-sm font-medium ${colors[value]}`}>{value}/5</span>;
+    return <span className={`inline-block px-2 py-0.5 rounded text-sm font-medium ${colors[value] || 'bg-gray-100 text-gray-800'}`}>{value}/5</span>;
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Trainer Feedback</h1>
+        {isTrainer && (
+          <Link
+            to="/feedback/new"
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700"
+          >
+            + Give Feedback
+          </Link>
+        )}
       </div>
 
       <div className="flex gap-4 mb-4">
@@ -104,7 +112,6 @@ export default function FeedbackList() {
                     <Link to={`/feedback/${r.id}`} className="text-blue-600 hover:underline">View</Link>
                     {isTrainer && (
                       <>
-                        <Link to={`/feedback/${r.id}/edit`} className="text-gray-600 hover:underline">Edit</Link>
                         <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:underline">Delete</button>
                       </>
                     )}
@@ -118,3 +125,4 @@ export default function FeedbackList() {
     </div>
   );
 }
+export default FeedbackList;

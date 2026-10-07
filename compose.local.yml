@@ -1,0 +1,21 @@
+# Local development services only. Requires LOCAL_DB_PASSWORD in your shell.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: hope_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${LOCAL_DB_PASSWORD:?Set LOCAL_DB_PASSWORD before starting}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - hope_local_pg:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:56379:6379"
+    volumes:
+      - hope_local_redis:/data
+volumes:
+  hope_local_pg:
+  hope_local_redis:

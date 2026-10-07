@@ -18,14 +18,14 @@ interface SectionForm {
   questions: QuestionForm[];
 }
 
-export default function AssessmentCreate() {
+export function AssessmentCreate() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = !!id;
 
   const [title, setTitle] = useState("");
   const [batchId, setBatchId] = useState("");
-  const [type, setType] = useState("CODING_TEST");
+  const [type, setType] = useState<"CODING_TEST" | "QUIZ" | "ASSIGNMENT" | "CONTEST">("CODING_TEST");
   const [assessmentDate, setAssessmentDate] = useState("");
   const [sections, setSections] = useState<SectionForm[]>([]);
   const [error, setError] = useState("");
@@ -34,11 +34,12 @@ export default function AssessmentCreate() {
 
   useEffect(() => {
     if (isEdit) {
-      getAssessment(id).then((res) => {
-        const a = res.data;
-        setTitle(a.title);
-        setBatchId(a.batchId);
-        setType(a.type);
+      getAssessment(id).then((res: any) => {
+        const a = res?.data ?? res;
+        if (!a) return;
+        setTitle(a.title || "");
+        setBatchId(a.batchId || "");
+        setType(a.type || "CODING_TEST");
         setAssessmentDate(a.assessmentDate?.split("T")[0] || "");
         if (a.sections) {
           setSections(
@@ -64,37 +65,25 @@ export default function AssessmentCreate() {
         }
       });
     }
-  }, [id]);
-
-  const totalMaxScore = sections.reduce(
-    (sum, s) => sum + s.questions.reduce((qs, q) => qs + (q.maxScore || 0), 0),
-    0
-  );
-
-  const weightageTotal = sections.reduce(
-    (sum, s) => sum + (parseFloat(s.weightage) || 0),
-    0
-  );
-
-  const hasWeightage = sections.some((s) => s.weightage !== "");
+  }, [id, isEdit]);
 
   const addSection = () => {
-    setSections([...sections, { title: "", weightage: "", questions: [{ label: "", maxScore: 0 }] }]);
+    setSections([...sections, { title: "", weightage: "", questions: [] }]);
   };
 
-  const removeSection = (si: number) => {
-    setSections(sections.filter((_, i) => i !== si));
+  const removeSection = (index: number) => {
+    setSections(sections.filter((_, i) => i !== index));
   };
 
-  const updateSectionField = (si: number, field: string, value: string) => {
+  const updateSectionField = (index: number, field: string, value: string) => {
     const updated = [...sections];
-    (updated[si] as any)[field] = value;
+    (updated[index] as any)[field] = value;
     setSections(updated);
   };
 
-  const addQuestion = (si: number) => {
+  const addQuestion = (sectionIndex: number) => {
     const updated = [...sections];
-    updated[si].questions.push({ label: "", maxScore: 0 });
+    updated[sectionIndex].questions.push({ label: "", maxScore: 10 });
     setSections(updated);
   };
 
@@ -109,6 +98,17 @@ export default function AssessmentCreate() {
     (updated[si].questions[qi] as any)[field] = value;
     setSections(updated);
   };
+
+  const totalMaxScore = sections.reduce(
+    (sum, s) => sum + s.questions.reduce((qSum, q) => qSum + (q.maxScore || 0), 0),
+    0
+  );
+
+  const hasWeightage = sections.some((s) => s.weightage !== "");
+  const weightageTotal = sections.reduce(
+    (sum, s) => sum + (parseFloat(s.weightage) || 0),
+    0
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,6 +173,7 @@ export default function AssessmentCreate() {
               required
             />
           </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Batch ID</label>
             <input
@@ -184,11 +185,12 @@ export default function AssessmentCreate() {
               disabled={isEdit}
             />
           </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
             <select
               value={type}
-              onChange={(e) => setType(e.target.value)}
+              onChange={(e) => setType(e.target.value as any)}
               className="w-full border rounded px-3 py-2"
             >
               <option value="CODING_TEST">Coding Test</option>
@@ -197,6 +199,7 @@ export default function AssessmentCreate() {
               <option value="CONTEST">Contest</option>
             </select>
           </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <input
@@ -341,3 +344,4 @@ export default function AssessmentCreate() {
     </div>
   );
 }
+export default AssessmentCreate;

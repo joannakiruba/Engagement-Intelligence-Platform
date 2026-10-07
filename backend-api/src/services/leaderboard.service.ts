@@ -163,7 +163,7 @@ export async function getWeeklyLeaderboard(batchId: string, weekParam?: string):
 
   const events = await prisma.event.findMany({
     where: {
-      eventDate: { gte: weekStart, lte: weekEnd },
+      startDate: { gte: weekStart, lte: weekEnd },
     },
     select: { id: true },
   });

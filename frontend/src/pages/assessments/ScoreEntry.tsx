@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getAssessment, submitQuestionScores } from "../../services/assessments.service";
 
-export default function ScoreEntry() {
+export function ScoreEntry() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [assessment, setAssessment] = useState<any>(null);
@@ -15,7 +15,7 @@ export default function ScoreEntry() {
 
   useEffect(() => {
     if (!id) return;
-    getAssessment(id).then((res) => setAssessment(res.data));
+    getAssessment(id).then((res: any) => setAssessment(res?.data ?? res));
   }, [id]);
 
   if (!assessment) return <p className="text-gray-500">Loading...</p>;
@@ -98,6 +98,7 @@ export default function ScoreEntry() {
                 {section.weightage !== null && ` (${section.weightage}%)`}
               </span>
             </div>
+
             {section.questions?.map((q: any) => (
               <div key={q.id} className="flex items-center gap-3 ml-4 mb-2">
                 <label className="flex-1 text-sm">{q.label}</label>
@@ -155,3 +156,4 @@ export default function ScoreEntry() {
     </div>
   );
 }
+export default ScoreEntry;

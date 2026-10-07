@@ -17,13 +17,11 @@ interface ProfileData {
 
 type Status = 'idle' | 'loading' | 'saving' | 'saved' | 'error';
 
-export default function ProfilePage() {
-  const { user, logout } = useAuth();
-
+export function ProfilePage() {
+  const { logout } = useAuth();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [status, setStatus] = useState<Status>('loading');
   const [errorMsg, setErrorMsg] = useState('');
-
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editing, setEditing] = useState(false);
@@ -37,7 +35,7 @@ export default function ProfilePage() {
     setErrorMsg('');
     try {
       const res = await api.get('/users/me');
-      const data: ProfileData = res.data.data;
+      const data: ProfileData = res.data?.data ?? res.data;
       setProfile(data);
       setEditName(data.name);
       setEditPhone(data.phone ?? '');
@@ -84,19 +82,16 @@ export default function ProfilePage() {
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     if (!profile || !hasChanges() || !isValid()) return;
-
     setStatus('saving');
     setErrorMsg('');
-
     const patch: Record<string, unknown> = {};
     const trimmedName = editName.trim();
     const normalizedPhone = editPhone.trim() || null;
     if (trimmedName !== profile.name) patch.name = trimmedName;
     if (normalizedPhone !== profile.phone) patch.phone = normalizedPhone;
-
     try {
       const res = await api.patch('/users/me', patch);
-      const data: ProfileData = res.data.data;
+      const data: ProfileData = res.data?.data ?? res.data;
       setProfile(data);
       setEditName(data.name);
       setEditPhone(data.phone ?? '');
@@ -139,6 +134,7 @@ export default function ProfilePage() {
           Profile updated successfully.
         </p>
       )}
+
       {errorMsg && (
         <p role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded px-4 py-2 mb-4">
           {errorMsg}
@@ -148,7 +144,7 @@ export default function ProfilePage() {
       <div className="bg-white rounded border p-6 space-y-4">
         {/* Read-only fields */}
         <Field label="Email" value={profile.email} />
-        <Field label="Role" value={profile.role.name} />
+        <Field label="Role" value={profile.role?.name || 'STUDENT'} />
         {profile.department && <Field label="Department" value={profile.department} />}
         {profile.year != null && <Field label="Year" value={String(profile.year)} />}
         <Field label="Status" value={profile.status} />
@@ -171,6 +167,7 @@ export default function ProfilePage() {
                 className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+
             <div>
               <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
                 Phone <span className="text-gray-400 font-normal">(optional)</span>
@@ -186,6 +183,7 @@ export default function ProfilePage() {
               />
               <p className="text-xs text-gray-400 mt-1">Leave empty to remove phone number.</p>
             </div>
+
             <div className="flex gap-3">
               <button
                 type="submit"
@@ -232,3 +230,5 @@ function Field({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+export default ProfilePage;

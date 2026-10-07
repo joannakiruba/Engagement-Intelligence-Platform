@@ -1,0 +1,25 @@
+{
+  "sources": {
+    "backend": "48b9e074368fe3c192568e0b5e3095c146f529e8",
+    "frontend": "33b9f39ab2ed5ada38caf3dd18e6bbef05a15c7f"
+  },
+  "backendBuild": "pass",
+  "frontendBuild": "pass",
+  "httpSmokeChecks": 24,
+  "backendTests": {
+    "passed": 1144,
+    "failed": 111,
+    "total": 1255,
+    "baselineSameResult": true
+  },
+  "workflow": {
+    "profilesAllRoles": true,
+    "batchMembership": true,
+    "taskProgress": true,
+    "grading": true,
+    "eventInterest": true,
+    "eventRegistration": true,
+    "sameOriginBuiltFrontend": true
+  },
+  "externalDeliveryTested": false
+}

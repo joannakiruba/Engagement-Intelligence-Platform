@@ -7,17 +7,17 @@ interface AssessmentSummary {
   id: string;
   title: string;
   type: string;
-  batchName: string;
+  batchName?: string;
   maxScore: number;
   assessmentDate: string;
-  sectionCount: number;
-  questionCount: number;
-  resultCount: number;
+  sectionCount?: number;
+  questionCount?: number;
+  resultCount?: number;
 }
 
-export default function AssessmentList() {
-  const { user } = useAuth();
-  const canManage = user && ["TRAINER", "ADMIN"].includes(user.role);
+export function AssessmentList() {
+  const { user, hasPermission } = useAuth();
+  const canManage = hasPermission('assessments:create:batch');
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
   const [typeFilter, setTypeFilter] = useState("");
   const [loading, setLoading] = useState(true);
@@ -27,8 +27,9 @@ export default function AssessmentList() {
     try {
       const params: Record<string, string> = {};
       if (typeFilter) params.type = typeFilter;
-      const res = await getAssessments(params);
-      setAssessments(res.data || []);
+      const res: any = await getAssessments(params);
+      const list = Array.isArray(res) ? res : res?.data ?? [];
+      setAssessments(list);
     } catch {
       setAssessments([]);
     }
@@ -48,13 +49,16 @@ export default function AssessmentList() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Assessments</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Assessments</h1>
+          <p className="text-sm text-gray-500">Track tests, quizzes, assignments, and contests across batches</p>
+        </div>
         {canManage && (
           <Link
-            to="/assessments/create"
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            to="/assessments/new"
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 shadow-xs"
           >
-            Create Assessment
+            + Create Assessment
           </Link>
         )}
       </div>
@@ -63,7 +67,7 @@ export default function AssessmentList() {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
-          className="border rounded px-3 py-2"
+          className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
         >
           <option value="">All Types</option>
           <option value="CODING_TEST">Coding Test</option>
@@ -74,65 +78,55 @@ export default function AssessmentList() {
       </div>
 
       {loading ? (
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-gray-500">Loading assessments...</p>
       ) : assessments.length === 0 ? (
         <p className="text-gray-500">No assessments found.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full bg-white border rounded-lg">
-            <thead className="bg-gray-50">
+        <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl shadow-xs">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Title</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Type</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Batch</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
-                  Max Score
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Date</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
-                  Sections
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
-                  Results
-                </th>
-                {canManage && <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Actions</th>}
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Title</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Type</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Max Score</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
+                {canManage && <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
               {assessments.map((a) => (
-                <tr key={a.id} className="border-t hover:bg-gray-50">
+                <tr key={a.id} className="hover:bg-slate-50/70 transition-colors">
                   <td className="px-4 py-3">
-                    <Link to={`/assessments/${a.id}`} className="text-blue-600 hover:underline">
+                    <Link to={`/assessments/${a.id}`} className="font-medium text-indigo-600 hover:text-indigo-800">
                       {a.title}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-sm">{a.type.replace("_", " ")}</td>
-                  <td className="px-4 py-3 text-sm">{a.batchName}</td>
-                  <td className="px-4 py-3 text-sm">{a.maxScore}</td>
-                  <td className="px-4 py-3 text-sm">
-                    {new Date(a.assessmentDate).toLocaleDateString()}
+                  <td className="px-4 py-3 text-sm text-slate-600">
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                      {a.type?.replace("_", " ")}
+                    </span>
                   </td>
-                  <td className="px-4 py-3 text-sm">
-                    {a.sectionCount} ({a.questionCount} Q)
+                  <td className="px-4 py-3 text-sm font-semibold text-slate-800">{a.maxScore}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600">
+                    {a.assessmentDate ? new Date(a.assessmentDate).toLocaleDateString() : 'N/A'}
                   </td>
-                  <td className="px-4 py-3 text-sm">{a.resultCount}</td>
                   {canManage && (
-                    <td className="px-4 py-3 text-sm space-x-2">
+                    <td className="px-4 py-3 text-sm text-right space-x-2">
                       <Link
-                        to={`/assessments/${a.id}/edit`}
-                        className="text-gray-600 hover:text-gray-900"
+                        to={`/assessments/${a.id}/scores`}
+                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded bg-indigo-50"
                       >
-                        Edit
+                        Scores
                       </Link>
                       <Link
-                        to={`/assessments/${a.id}/bulk-upload`}
-                        className="text-green-600 hover:text-green-800"
+                        to={`/assessments/${a.id}/upload`}
+                        className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-2 py-1 rounded bg-emerald-50"
                       >
-                        Upload
+                        Upload CSV
                       </Link>
                       <button
                         onClick={() => handleDelete(a.id)}
-                        className="text-red-600 hover:text-red-800"
+                        className="text-xs font-medium text-rose-600 hover:text-rose-800 px-2 py-1 rounded bg-rose-50"
                       >
                         Delete
                       </button>
@@ -147,3 +141,4 @@ export default function AssessmentList() {
     </div>
   );
 }
+export default AssessmentList;

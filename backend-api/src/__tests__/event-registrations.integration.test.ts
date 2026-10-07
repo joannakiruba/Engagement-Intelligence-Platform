@@ -11,6 +11,7 @@ const fns = {
   regFindMany: jest.fn(),
   regCreate: jest.fn(),
   regDelete: jest.fn(),
+  setStatus: jest.fn(),
 };
 
 jest.mock('../auth/rbac.middleware', () => ({
@@ -31,6 +32,10 @@ jest.mock('../lib/prisma', () => ({
       delete: (...a: any[]) => fns.regDelete(...a),
     },
   },
+}));
+
+jest.mock('../services/events.service', () => ({
+  setStudentRegistrationStatus: (...args: any[]) => fns.setStatus(...args),
 }));
 
 import eventRegRoutes from '../routes/event-registrations.routes';
@@ -74,33 +79,34 @@ describe('POST /api/event-registrations', () => {
   it('registers student for an event', async () => {
     fns.eventFindUnique.mockResolvedValue({ ...SAMPLE_EVENT, registrationDeadline: new Date('2099-12-31') });
     fns.regFindUnique.mockResolvedValue(null);
-    fns.regCreate.mockResolvedValue(SAMPLE_REG);
+    fns.setStatus.mockResolvedValue(SAMPLE_REG);
 
     const res = await request(app).post('/api/event-registrations').send({ eventId: EVENT_ID });
 
     expect(res.status).toBe(201);
     expect(res.body.data.eventId).toBe(EVENT_ID);
+    expect(fns.setStatus).toHaveBeenCalledWith(EVENT_ID, STUDENT_ID, 'INTERESTED');
   });
 
   it('returns 404 when event not found', async () => {
-    fns.eventFindUnique.mockResolvedValue(null);
+    fns.setStatus.mockRejectedValue(Object.assign(new Error('Event not found'), { statusCode: 404 }));
 
     const res = await request(app).post('/api/event-registrations').send({ eventId: 'nonexistent' });
 
     expect(res.status).toBe(404);
   });
 
-  it('returns 409 when already registered', async () => {
+  it('propagates a closed-event conflict', async () => {
     fns.eventFindUnique.mockResolvedValue({ ...SAMPLE_EVENT, registrationDeadline: new Date('2099-12-31') });
-    fns.regFindUnique.mockResolvedValue(SAMPLE_REG);
+    fns.setStatus.mockRejectedValue(Object.assign(new Error('Event closed'), { statusCode: 409 }));
 
     const res = await request(app).post('/api/event-registrations').send({ eventId: EVENT_ID });
 
     expect(res.status).toBe(409);
   });
 
-  it('returns 400 when registration deadline passed', async () => {
-    fns.eventFindUnique.mockResolvedValue({ ...SAMPLE_EVENT, registrationDeadline: new Date('2020-01-01') });
+  it('propagates a registration transition validation error', async () => {
+    fns.setStatus.mockRejectedValue(Object.assign(new Error('Invalid transition'), { statusCode: 400 }));
 
     const res = await request(app).post('/api/event-registrations').send({ eventId: EVENT_ID });
 
@@ -139,11 +145,13 @@ describe('GET /api/event-registrations', () => {
 describe('DELETE /api/event-registrations/:id', () => {
   it('cancels own registration', async () => {
     fns.regFindUnique.mockResolvedValue(SAMPLE_REG);
-    fns.regDelete.mockResolvedValue(SAMPLE_REG);
+    fns.setStatus.mockResolvedValue({ ...SAMPLE_REG, status: 'WITHDRAWN' });
 
     const res = await request(app).delete(`/api/event-registrations/${REG_ID}`);
 
     expect(res.status).toBe(200);
+    expect(fns.setStatus).toHaveBeenCalledWith(EVENT_ID, STUDENT_ID, 'WITHDRAWN');
+    expect(fns.regDelete).not.toHaveBeenCalled();
   });
 
   it('returns 404 when not found', async () => {

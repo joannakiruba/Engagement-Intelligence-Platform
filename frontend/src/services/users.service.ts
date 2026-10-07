@@ -1,96 +1,69 @@
+import { getList } from './contracts';
+// src/services/users.service.ts
 import api from './api';
+import { User, RoleName } from '../types';
 
-export interface UserSummary {
-  id: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  department: string | null;
-  year: number | null;
-  status: string;
-  createdAt: string;
-  role: { id: string; name: string };
+export async function getMe(): Promise<User> {
+  const res = await api.get('/users/me');
+  const d = res.data.data;
+  return {
+    ...d,
+    role: (d.role?.name ?? d.role) as RoleName,
+  };
 }
 
-export interface UserDetail extends UserSummary {
-  updatedAt: string;
+export async function updateMe(payload: Partial<User>): Promise<User> {
+  const res = await api.patch('/users/me', { name: payload.name, phone: payload.phone });
+  const d = res.data.data;
+  return {
+    ...d,
+    role: (d.role?.name ?? d.role) as RoleName,
+  };
 }
 
-export interface Role {
-  id: string;
-  name: string;
+export async function getUsers(params?: { role?: string; search?: string }): Promise<User[]> {
+  const { role, ...query } = params || {};
+  const rows = await getList('/users', query, 'users');
+  return rows.filter((d: any) => !role || (d.role?.name ?? d.role) === role).map((d: any) => ({
+    ...d,
+    role: (d.role?.name ?? d.role) as RoleName,
+  }));
 }
 
-export interface UserListResponse {
-  users: UserSummary[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
-export interface UserListParams {
-  page?: number;
-  limit?: number;
-  search?: string;
-  roleId?: string;
-  status?: string;
-  department?: string;
-}
-
-export interface CreateUserPayload {
-  name: string;
-  email: string;
-  roleId?: string;
-  department?: string;
-  year?: number | null;
-}
-
-export interface BulkCsvResult {
-  created: Array<{ row: number; email: string; userId: string }>;
-  rejected: Array<{ row: number; email?: string; reason: string }>;
-}
-
-export async function getUsers(params: UserListParams = {}): Promise<UserListResponse> {
-  const res = await api.get('/users', { params });
-  return res.data.data;
-}
-
-export async function getUser(id: string): Promise<UserDetail> {
+export async function getUser(id: string): Promise<User> {
   const res = await api.get(`/users/${id}`);
+  const d = res.data.data;
+  return {
+    ...d,
+    role: (d.role?.name ?? d.role) as RoleName,
+  };
+}
+
+export async function createUser(payload: {
+  name: string;
+  email: string;
+  role: RoleName;
+  department?: string;
+  year?: number;
+  phone?: string;
+}): Promise<User> {
+  const { role, ...fields } = payload;
+  const roles = (await api.get('/users/roles')).data.data;
+  const roleId = roles.find((r: any) => r.name === role)?.id;
+  if (!roleId) throw new Error('Role is not configured in the database');
+  const res = await api.post('/admin/users', { ...fields, roleId });
   return res.data.data;
 }
 
-export async function getRoles(): Promise<Role[]> {
-  const res = await api.get('/users/roles');
+export async function changeUserRole(id: string, role: RoleName): Promise<User> {
+  const roles = (await api.get('/users/roles')).data.data;
+  const roleId = roles.find((r: any) => r.name === role)?.id;
+  if (!roleId) throw new Error('Role is not configured in the database');
+  const res = await api.patch(`/admin/users/${id}/role`, { roleId });
   return res.data.data;
 }
 
-export async function createUser(payload: CreateUserPayload): Promise<UserDetail> {
-  const res = await api.post('/users', payload);
-  return res.data.data;
-}
-
-export async function updateUser(id: string, data: Partial<Pick<UserSummary, 'name' | 'phone' | 'department' | 'year'>>): Promise<UserDetail> {
-  const res = await api.patch(`/users/${id}`, data);
-  return res.data.data;
-}
-
-export async function changeUserRole(id: string, roleId: string): Promise<{ message: string }> {
-  const res = await api.patch(`/users/${id}/role`, { roleId });
-  return res.data.data;
-}
-
-export async function changeUserStatus(id: string, status: 'ACTIVE' | 'INACTIVE'): Promise<{ message: string }> {
-  const res = await api.patch(`/users/${id}/status`, { status });
-  return res.data.data;
-}
-
-export async function recoverUserAccount(id: string): Promise<{ message: string }> {
-  const res = await api.patch(`/users/${id}/recover`);
-  return res.data.data;
-}
-
-export async function bulkCreateUsers(csv: string): Promise<BulkCsvResult> {
-  const res = await api.post('/admin/users/bulk-csv', { csv });
+export async function changeUserStatus(id: string, status: 'ACTIVE' | 'INACTIVE' | 'PENDING'): Promise<User> {
+  const res = await api.patch(`/admin/users/${id}/status`, { status });
   return res.data.data;
 }

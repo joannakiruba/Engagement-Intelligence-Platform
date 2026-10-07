@@ -539,10 +539,10 @@ async function main() {
     const event = await prisma.event.create({
       data: {
         title: def.title,
-        eventType: def.type,
+        category: def.type === 'HACKATHON' ? 'HACKATHON' : def.type === 'CONTEST' ? 'CODING' : 'OTHER',
+        createdById: creatorId,
         description: def.description,
-        eventDate: dateOffset(def.daysFromStart),
-        registrationDeadline: dateOffset(def.daysFromStart - 2),
+        startDate: dateOffset(def.daysFromStart),
       },
     });
     eventIds.push(event.id);

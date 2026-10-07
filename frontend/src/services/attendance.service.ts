@@ -1,163 +1,107 @@
+// src/services/attendance.service.ts
 import api from './api';
+import { AttendanceRecord, AttendanceWindow } from '../types';
 
-const API = '/api/attendance';
-
-export interface AttendanceRecord {
-  studentId: string;
-  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
-  remarks?: string;
-}
-
-// --- Attendance Windows ---
+export type { AttendanceRecord, AttendanceWindow };
 
 export async function createWindow(data: {
   sessionId: string;
   label: string;
   startTime: string;
   endTime: string;
-}) {
-  const res = await api.post(`${API}/windows`, data);
-  return res.data;
+}): Promise<AttendanceWindow> {
+  const res = await api.post('/api/attendance/windows', data);
+  return res.data?.data ?? res.data;
 }
 
-export async function getSessionWindows(sessionId: string) {
-  const res = await api.get(`${API}/session/${sessionId}/windows`);
-  return res.data;
+export async function getSessionWindows(sessionId: string): Promise<any> {
+  const res = await api.get(`/api/attendance/session/${sessionId}/windows`);
+  return res.data?.data ?? res.data;
 }
 
-// --- Window attendance ---
-
-export async function getWindowAttendance(windowId: string) {
-  const res = await api.get(`${API}/window/${windowId}`);
-  return res.data;
+export async function getWindowAttendance(windowId: string): Promise<any> {
+  const res = await api.get(`/api/attendance/window/${windowId}`);
+  return res.data?.data ?? res.data;
 }
 
-// --- Session attendance (all windows combined) ---
-
-export async function getSessionAttendance(sessionId: string) {
-  const res = await api.get(`${API}/session/${sessionId}`);
-  return res.data;
+export async function getWindowQR(windowId: string): Promise<any> {
+  const res = await api.get(`/api/attendance/window/${windowId}/qr`);
+  return res.data?.data ?? res.data;
 }
 
-// --- Mark attendance ---
-
-export async function markAttendance(
-  windowId: string,
-  studentId: string,
-  status: string,
-  remarks?: string
-) {
-  const res = await api.post(`${API}/mark`, { windowId, studentId, status, remarks });
-  return res.data;
+export async function checkInStudent(
+  data: { windowId?: string; qrToken?: string } | string,
+  tokenArg?: string
+): Promise<any> {
+  const payload = typeof data === 'string' ? { windowId: data, qrToken: tokenArg } : data;
+  const res = await api.post('/api/attendance/check-in', payload);
+  return res.data?.data ?? res.data;
 }
 
-export async function bulkMarkAttendance(windowId: string, records: AttendanceRecord[]) {
-  const res = await api.post(`${API}/bulk`, { windowId, records });
-  return res.data;
-}
+export const studentCheckIn = checkInStudent;
 
-export async function updateAttendance(id: string, data: { status?: string; remarks?: string }) {
-  const res = await api.put(`${API}/${id}`, data);
-  return res.data;
-}
-
-// --- Student ---
-
-export async function getStudentAttendance(
-  studentId: string,
-  params?: { batchId?: string; from?: string; to?: string; sessionId?: string }
-) {
-  const res = await api.get(`${API}/student/${studentId}`, { params });
-  return res.data;
-}
-
-// --- Batch ---
-
-export async function getBatchAttendanceStats(batchId: string) {
-  const res = await api.get(`${API}/batch/${batchId}/stats`);
-  return res.data;
-}
-
-// --- Exports ---
-
-export async function exportSessionCsv(sessionId: string) {
-  const res = await api.get(`${API}/session/${sessionId}/export`, { responseType: 'blob' });
-  return res.data;
-}
-
-export async function exportBatchExcel(
-  batchId: string,
-  params?: { from?: string; to?: string; sessionId?: string }
-) {
-  const res = await api.get(`${API}/batch/${batchId}/export`, { params, responseType: 'blob' });
-  return res.data;
-}
-
-// --- QR ---
-
-export async function getWindowQR(windowId: string) {
-  const res = await api.get(`${API}/window/${windowId}/qr`);
-  return res.data;
-}
-
-// --- Excused records (trainer review) ---
-
-export async function getExcusedRecords(
-  params?: { batchId?: string; sessionId?: string; from?: string; to?: string }
-) {
-  const res = await api.get(`${API}/excused`, { params });
-  return res.data;
-}
-
-// --- Student check-in ---
-
-export async function studentCheckIn(
-  windowId: string,
-  qrToken: string,
-  extra?: { bssid?: string; ssid?: string }
-) {
-  const res = await api.post(`${API}/check-in`, { windowId, qrToken, ...extra });
-  return res.data;
-}
-
-// --- Attendance flags (admin) ---
-
-export interface AttendanceFlagItem {
-  id: string;
-  attendanceId: string;
+export async function markAttendance(data: {
+  sessionId: string;
   studentId: string;
-  reason: string;
-  details: string | null;
-  status: string;
-  reviewedBy: string | null;
-  resolvedAt: string | null;
-  createdAt: string;
-  student: { id: string; name: string; email: string };
-  attendance: {
-    id: string;
-    windowId: string;
-    studentIp: string | null;
-    networkFingerprint: string | null;
-    checkInTime: string | null;
-    session: { id: string; title: string; scheduledDate: string };
-    window: { id: string; label: string; trainerIp: string | null; networkFingerprint: string | null };
-  };
-  reviewer: { id: string; name: string } | null;
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
+  remarks?: string;
+  windowId?: string;
+}): Promise<any> {
+  const res = await api.post('/api/attendance/mark', data);
+  return res.data?.data ?? res.data;
 }
 
-export async function getAttendanceFlags(
-  params?: { status?: string; batchId?: string; from?: string; to?: string }
-) {
-  const res = await api.get(`${API}/flags`, { params });
+export async function bulkMarkAttendance(sessionIdOrWindowId: string, records: {
+  studentId: string;
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
+  remarks?: string;
+}[]): Promise<any> {
+  const res = await api.post('/api/attendance/bulk', { windowId: sessionIdOrWindowId, records });
+  return res.data?.data ?? res.data;
+}
+
+export async function updateAttendanceRecord(id: string, data: {
+  status?: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
+  remarks?: string;
+}): Promise<any> {
+  const res = await api.put(`/api/attendance/${id}`, data);
+  return res.data?.data ?? res.data;
+}
+
+export const updateAttendance = updateAttendanceRecord;
+
+export async function getSessionAttendance(sessionId: string): Promise<any> {
+  const res = await api.get(`/api/attendance/session/${sessionId}`);
+  return res.data?.data ?? res.data;
+}
+
+export async function getStudentAttendance(studentId: string, params?: Record<string, string>): Promise<any> {
+  const res = await api.get(`/api/attendance/student/${studentId}`, { params });
+  return res.data?.data ?? res.data;
+}
+
+export async function getBatchAttendanceStats(batchId: string): Promise<any> {
+  const res = await api.get(`/api/attendance/batch/${batchId}/stats`);
+  return res.data?.data ?? res.data;
+}
+
+export async function getExcusedAttendance(params?: Record<string, string>): Promise<any> {
+  const res = await api.get('/api/attendance/excused', { params });
+  return res.data?.data ?? res.data;
+}
+
+export const getExcusedRecords = getExcusedAttendance;
+
+export async function exportBatchExcel(batchId: string, _params?: any): Promise<Blob> {
+  const res = await api.get(`/api/attendance/batch/${batchId}/export`, {
+    responseType: 'blob',
+  });
   return res.data;
 }
 
-export async function resolveAttendanceFlag(flagId: string, status: 'CONFIRMED_FRAUD' | 'DISMISSED') {
-  const res = await api.put(`${API}/flags/${flagId}`, { status });
-  return res.data;
-}
-
-export async function getAttendanceFlagStats() {
-  const res = await api.get(`${API}/flags/stats`);
+export async function exportSessionCsv(sessionId: string): Promise<Blob> {
+  const res = await api.get(`/api/attendance/session/${sessionId}/export`, {
+    responseType: 'blob',
+  });
   return res.data;
 }

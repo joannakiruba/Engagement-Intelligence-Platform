@@ -1,3 +1,5 @@
+import path from 'path';
+import { existsSync } from 'fs';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -41,6 +43,20 @@ app.use(cors({
 app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 app.use(generalRateLimit);
+
+// Serve the built frontend from the same origin when present. API requests remain JSON.
+const frontendDist = path.resolve(__dirname, '../../frontend/dist');
+if (existsSync(path.join(frontendDist, 'index.html'))) {
+  app.use(express.static(frontendDist, { index: false }));
+  app.use((req, res, next) => {
+    const apiPath = /^\/(api(?:-docs)?|auth|health)(\/|$)/.test(req.path);
+    if (req.method === 'GET' && req.headers.accept?.includes('text/html') && !apiPath) {
+      res.sendFile(path.join(frontendDist, 'index.html'));
+      return;
+    }
+    next();
+  });
+}
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -34,9 +34,18 @@ interface WindowInfo {
 }
 
 interface SessionData {
-  session: { id: string; title: string; scheduledDate: string };
-  windows: WindowInfo[];
-  summary: {
+  session?: { id: string; title: string; scheduledDate: string };
+  batch?: { id: string; name: string };
+  windows?: WindowInfo[];
+  stats?: {
+    total: number;
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    rate: number;
+  };
+  summary?: {
     total: number;
     present: number;
     absent: number;
@@ -45,27 +54,32 @@ interface SessionData {
     unmarked: number;
   };
   records: AttendanceRecord[];
-  unmarked: { studentId: string; student: { id: string; name: string; email: string; department: string | null; year: number | null } }[];
+  unmarked?: { studentId: string; student: { id: string; name: string; email: string; department: string | null; year: number | null } }[];
 }
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-export default function SessionAttendance() {
-  const { sessionId } = useParams<{ sessionId: string }>();
+export function SessionAttendance() {
+  const { id, sessionId: routeSessionId } = useParams<{ id?: string; sessionId?: string }>();
+  const activeSessionId = id || routeSessionId || '';
   const [data, setData] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!activeSessionId) {
+      setLoading(false);
+      return;
+    }
     loadData();
-  }, [sessionId]);
+  }, [activeSessionId]);
 
   async function loadData() {
     setLoading(true);
     try {
-      const res = await getSessionAttendance(sessionId!);
-      setData(res.data);
+      const res: any = await getSessionAttendance(activeSessionId);
+      const parsed = res?.data ?? res;
+      setData(parsed);
     } catch {
       setData(null);
     }
@@ -73,13 +87,13 @@ export default function SessionAttendance() {
   }
 
   async function handleExport() {
-    if (!sessionId) return;
+    if (!activeSessionId) return;
     try {
-      const blob = await exportSessionCsv(sessionId);
+      const blob = await exportSessionCsv(activeSessionId);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `attendance-${sessionId}.csv`;
+      a.download = `session-attendance-${activeSessionId}.csv`;
       a.click();
       window.URL.revokeObjectURL(url);
     } catch {
@@ -88,109 +102,99 @@ export default function SessionAttendance() {
   }
 
   if (loading) {
-    return <div className="text-center py-10 text-gray-500">Loading...</div>;
+    return <div className="text-center py-10 text-gray-500">Loading session attendance...</div>;
   }
 
   if (!data) {
-    return <div className="text-center py-10 text-red-500">Failed to load session attendance.</div>;
+    return (
+      <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
+        <p className="text-slate-600 mb-4">No session attendance data available.</p>
+        <Link to="/batches" className="text-indigo-600 font-medium hover:underline">
+          &larr; View Batches &amp; Sessions
+        </Link>
+      </div>
+    );
   }
 
-  const { summary } = data;
-  const attendanceRate = summary.total > 0
-    ? Math.round(((summary.present + summary.late) / summary.total) * 100)
-    : 0;
-
-  const scheduledDate = new Date(data.session.scheduledDate);
-  const dayOfWeek = DAY_NAMES[scheduledDate.getDay()];
+  const session = data.session || { id: activeSessionId, title: 'Session Details', scheduledDate: new Date().toISOString() };
+  const date = new Date(session.scheduledDate);
+  const summary = data.summary || {
+    total: data.stats?.total ?? data.records?.length ?? 0,
+    present: data.stats?.present ?? 0,
+    absent: data.stats?.absent ?? 0,
+    late: data.stats?.late ?? 0,
+    excused: data.stats?.excused ?? 0,
+    unmarked: 0,
+  };
+  const attendanceRate = data.stats?.rate ?? (summary.total > 0 ? Math.round(((summary.present + summary.late) / summary.total) * 100) : 0);
 
   const allStudents = [
-    ...data.records.map((r) => ({ ...r, displayStatus: r.status })),
-    ...data.unmarked.map((um) => ({
-      id: '',
+    ...(data.records || []),
+    ...(data.unmarked || []).map((u) => ({
+      id: u.studentId,
       status: 'NOT_MARKED',
-      displayStatus: 'NOT_MARKED',
       checkInTime: null,
       remarks: null,
-      student: um.student,
+      student: u.student,
     })),
   ];
 
-  const filteredStudents = statusFilter === 'ALL'
-    ? allStudents
-    : allStudents.filter((s) => s.status === statusFilter);
+  const filteredStudents =
+    statusFilter === 'ALL'
+      ? allStudents
+      : allStudents.filter((r) => r.status === statusFilter);
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-4">
+      {/* Session header */}
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">{data.session.title}</h1>
-          <p className="text-gray-500 text-sm">
-            {scheduledDate.toLocaleDateString()} ({dayOfWeek})
+          <h1 className="text-2xl font-bold text-slate-900">{session.title}</h1>
+          <p className="text-slate-500 text-sm">
+            {DAY_NAMES[date.getDay()]}, {date.toLocaleDateString()}
           </p>
-          <p className="text-gray-400 text-xs">Session ID: {data.session.id}</p>
         </div>
         <div className="flex gap-2">
-          <Link
-            to={`/attendance/mark/${sessionId}`}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-          >
-            Edit Attendance
-          </Link>
           <button
             onClick={handleExport}
-            className="px-4 py-2 border rounded text-sm hover:bg-gray-50"
+            className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm font-medium border border-slate-200"
           >
             Export CSV
           </button>
+          <Link
+            to={`/attendance/mark/${activeSessionId}`}
+            className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium shadow-xs"
+          >
+            Mark Attendance
+          </Link>
         </div>
       </div>
 
-      {/* Windows list */}
-      {data.windows && data.windows.length > 0 && (
-        <div className="mb-4">
-          <h3 className="text-sm font-medium text-gray-600 mb-2">Attendance Windows</h3>
-          <div className="flex gap-2">
-            {data.windows.map((w) => (
-              <Link
-                key={w.id}
-                to={`/attendance/qr/${w.id}`}
-                className="bg-white border rounded px-3 py-2 text-sm hover:bg-gray-50"
-              >
-                <div className="font-medium">{w.label}</div>
-                <div className="text-xs text-gray-500">
-                  {new Date(w.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — {new Date(w.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              </Link>
-            ))}
-          </div>
+      {/* Summary stats cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
+          <div className="text-2xl font-bold text-slate-800">{summary.total}</div>
+          <div className="text-xs text-slate-500">Total</div>
         </div>
-      )}
-
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
-        <div className="bg-white p-4 rounded shadow text-center">
-          <div className="text-2xl font-bold">{summary.total}</div>
-          <div className="text-xs text-gray-500">Total</div>
+        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 text-center">
+          <div className="text-2xl font-bold text-emerald-700">{summary.present}</div>
+          <div className="text-xs text-emerald-600">Present</div>
         </div>
-        <div className="bg-green-50 p-4 rounded shadow text-center">
-          <div className="text-2xl font-bold text-green-700">{summary.present}</div>
-          <div className="text-xs text-green-600">Present</div>
+        <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 text-center">
+          <div className="text-2xl font-bold text-rose-700">{summary.absent}</div>
+          <div className="text-xs text-rose-600">Absent</div>
         </div>
-        <div className="bg-red-50 p-4 rounded shadow text-center">
-          <div className="text-2xl font-bold text-red-700">{summary.absent}</div>
-          <div className="text-xs text-red-600">Absent</div>
+        <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-center">
+          <div className="text-2xl font-bold text-amber-700">{summary.late}</div>
+          <div className="text-xs text-amber-600">Late</div>
         </div>
-        <div className="bg-yellow-50 p-4 rounded shadow text-center">
-          <div className="text-2xl font-bold text-yellow-700">{summary.late}</div>
-          <div className="text-xs text-yellow-600">Late</div>
-        </div>
-        <div className="bg-blue-50 p-4 rounded shadow text-center">
+        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
           <div className="text-2xl font-bold text-blue-700">{summary.excused}</div>
           <div className="text-xs text-blue-600">Excused</div>
         </div>
-        <div className="bg-white p-4 rounded shadow text-center">
-          <div className="text-2xl font-bold">{attendanceRate}%</div>
-          <div className="text-xs text-gray-500">Rate</div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
+          <div className="text-2xl font-bold text-indigo-600">{attendanceRate}%</div>
+          <div className="text-xs text-slate-500">Rate</div>
         </div>
       </div>
 
@@ -200,20 +204,20 @@ export default function SessionAttendance() {
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
-            className={`px-3 py-1 text-sm rounded border ${
-              statusFilter === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white hover:bg-gray-50'
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+              statusFilter === s ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
             }`}
           >
-            {s === 'ALL' ? 'All' : STATUS_CODE[s]}
+            {s === 'ALL' ? 'All Records' : STATUS_CODE[s] + ' — ' + s}
           </button>
         ))}
       </div>
 
       {/* Records table */}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse bg-white shadow rounded-lg overflow-hidden">
+      <div className="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-xs">
+        <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-gray-50 text-left text-sm text-gray-600">
+            <tr className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
               <th className="px-4 py-3 w-8">#</th>
               <th className="px-4 py-3">Student</th>
               <th className="px-4 py-3">Department</th>
@@ -223,25 +227,25 @@ export default function SessionAttendance() {
               <th className="px-4 py-3">Remarks</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100 text-sm">
             {filteredStudents.map((rec, idx) => (
-              <tr key={rec.student.id + rec.status} className={`border-t text-sm ${rec.status === 'NOT_MARKED' ? 'bg-gray-50' : ''}`}>
-                <td className="px-4 py-2 text-gray-400">{idx + 1}</td>
-                <td className="px-4 py-2">
-                  <div className={`font-medium ${rec.status === 'NOT_MARKED' ? 'text-gray-400' : ''}`}>{rec.student.name}</div>
-                  <div className="text-xs text-gray-400">{rec.student.email}</div>
+              <tr key={rec.id || (rec.student?.id || idx)} className={`hover:bg-slate-50 ${rec.status === 'NOT_MARKED' ? 'bg-slate-50/50' : ''}`}>
+                <td className="px-4 py-2.5 text-slate-400">{idx + 1}</td>
+                <td className="px-4 py-2.5">
+                  <div className={`font-medium ${rec.status === 'NOT_MARKED' ? 'text-slate-400' : 'text-slate-800'}`}>{rec.student?.name}</div>
+                  <div className="text-xs text-slate-400">{rec.student?.email}</div>
                 </td>
-                <td className="px-4 py-2 text-gray-500">{rec.student.department || '—'}</td>
-                <td className="px-4 py-2 text-gray-500">{rec.student.year || '—'}</td>
-                <td className="px-4 py-2">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[rec.status] || 'bg-gray-100'}`}>
-                    {STATUS_CODE[rec.status] || rec.status}
+                <td className="px-4 py-2.5 text-slate-500">{rec.student?.department || '—'}</td>
+                <td className="px-4 py-2.5 text-slate-500">{rec.student?.year || '—'}</td>
+                <td className="px-4 py-2.5">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[rec.status] || 'bg-slate-100 text-slate-700'}`}>
+                    {rec.status}
                   </span>
                 </td>
-                <td className="px-4 py-2 text-gray-500">
-                  {rec.checkInTime ? new Date(rec.checkInTime).toLocaleTimeString() : '—'}
+                <td className="px-4 py-2.5 text-slate-500">
+                  {rec.checkInTime ? new Date(rec.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
                 </td>
-                <td className="px-4 py-2 text-gray-500">{rec.remarks || '—'}</td>
+                <td className="px-4 py-2.5 text-slate-500">{rec.remarks || '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -250,3 +254,4 @@ export default function SessionAttendance() {
     </div>
   );
 }
+export default SessionAttendance;
