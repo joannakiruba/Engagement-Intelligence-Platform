@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { StatCard } from '../../components/common/StatCard';
 import { LoadingState } from '../../components/common/LoadingState';
-import { getBatches } from '../../services/batches.service';
+import { getBatches, getSessions } from '../../services/batches.service';
 import { getAssessments } from '../../services/assessments.service';
 import { getExcusedAttendance } from '../../services/attendance.service';
 import { getFeedbackList } from '../../services/feedback.service';
@@ -23,6 +23,7 @@ export const TrainerDashboard: React.FC = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
   const [assessments, setAssessments] = useState<any[]>([]);
   const [excusedRecords, setExcusedRecords] = useState<any[]>([]);
   const [feedbackCount, setFeedbackCount] = useState<number>(0);
@@ -41,6 +42,10 @@ export const TrainerDashboard: React.FC = () => {
         setAssessments(a);
         setExcusedRecords(exc);
         setFeedbackCount(fb.length);
+        const sessionResults = await Promise.all(
+          b.map((batch: any) => getSessions(batch.id).catch(() => []))
+        );
+        setSessions(sessionResults.flat());
       } finally {
         setLoading(false);
       }
@@ -212,8 +217,45 @@ export const TrainerDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Trainer Actions */}
+        {/* QR Attendance & Trainer Actions */}
         <div className="space-y-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-amber-600" />
+                <h3 className="font-semibold text-slate-900 text-sm">QR Attendance</h3>
+              </div>
+              <Link to="/attendance/overview" className="text-xs font-semibold text-amber-600 hover:text-amber-700">
+                All Sessions
+              </Link>
+            </div>
+            {sessions.length === 0 ? (
+              <p className="text-xs text-slate-500 py-4 text-center">No sessions found for your batches.</p>
+            ) : (
+              <div className="space-y-2">
+                {sessions.slice(0, 5).map((session: any) => (
+                  <div key={session.id} className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 bg-slate-50/50">
+                    <div className="min-w-0 flex-1 mr-2">
+                      <span className="text-xs font-semibold text-slate-900 block truncate">{session.title}</span>
+                      <span className="text-[11px] text-slate-500">
+                        {new Date(session.scheduledDate).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <a
+                      href={`/attendance/qr-fullscreen/${session.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors inline-flex items-center gap-1"
+                    >
+                      <QrCode className="w-3 h-3" />
+                      Project QR
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
             <h3 className="font-semibold text-slate-900 text-sm mb-3">Trainer Shortcuts</h3>
             <div className="space-y-2">

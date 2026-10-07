@@ -9,6 +9,7 @@ import { getMentorAlerts, updateAlertStatus } from '../../services/mentor.servic
 import { getHighRiskStudents } from '../../services/risk.service';
 import { getInterventions } from '../../services/interventions.service';
 import { getMentorAssignments } from '../../services/mentor.service';
+import { getBatches, getSessions } from '../../services/batches.service';
 import {
   Bell,
   AlertTriangle,
@@ -19,6 +20,7 @@ import {
   ArrowRight,
   PlusCircle,
   Eye,
+  QrCode,
 } from 'lucide-react';
 
 export const MentorDashboard: React.FC = () => {
@@ -28,21 +30,27 @@ export const MentorDashboard: React.FC = () => {
   const [highRisks, setHighRisks] = useState<any[]>([]);
   const [interventions, setInterventions] = useState<any[]>([]);
   const [assignedCount, setAssignedCount] = useState<number>(0);
+  const [sessions, setSessions] = useState<any[]>([]);
 
   const loadData = async () => {
     if (!user) return;
     try {
       setLoading(true);
-      const [al, hr, interv, assign] = await Promise.all([
+      const [al, hr, interv, assign, b] = await Promise.all([
         getMentorAlerts(user.id).catch(() => []),
         getHighRiskStudents().catch(() => []),
         getInterventions().catch(() => []),
         getMentorAssignments({ mentorId: user.id }).catch(() => []),
+        getBatches().catch(() => []),
       ]);
       setAlerts(al);
       setHighRisks(hr);
       setInterventions(interv);
       setAssignedCount(assign.length);
+      const sessionResults = await Promise.all(
+        b.map((batch: any) => getSessions(batch.id).catch(() => []))
+      );
+      setSessions(sessionResults.flat());
     } finally {
       setLoading(false);
     }
@@ -89,6 +97,13 @@ export const MentorDashboard: React.FC = () => {
           >
             <PlusCircle className="w-4 h-4" />
             Create Intervention
+          </Link>
+          <Link
+            to="/attendance/overview"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-teal-800 font-semibold text-sm hover:bg-teal-50 shadow-sm transition-all"
+          >
+            <QrCode className="w-4 h-4" />
+            Launch QR
           </Link>
           <Link
             to="/mentor-alerts"
@@ -253,8 +268,46 @@ export const MentorDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: High Risk Mentees & Guidance */}
+        {/* Right Column: QR, High Risk Mentees & Guidance */}
         <div className="space-y-6">
+          {/* QR Attendance Sessions */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-teal-600" />
+                <h3 className="font-semibold text-slate-900 text-sm">QR Attendance</h3>
+              </div>
+              <Link to="/attendance/overview" className="text-xs font-semibold text-teal-600 hover:text-teal-700">
+                All Sessions
+              </Link>
+            </div>
+            {sessions.length === 0 ? (
+              <p className="text-xs text-slate-500 py-4 text-center">No sessions found for your batches.</p>
+            ) : (
+              <div className="space-y-2">
+                {sessions.slice(0, 5).map((session: any) => (
+                  <div key={session.id} className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 bg-slate-50/50">
+                    <div className="min-w-0 flex-1 mr-2">
+                      <span className="text-xs font-semibold text-slate-900 block truncate">{session.title}</span>
+                      <span className="text-[11px] text-slate-500">
+                        {new Date(session.scheduledDate).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <a
+                      href={`/attendance/qr-fullscreen/${session.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors inline-flex items-center gap-1"
+                    >
+                      <QrCode className="w-3 h-3" />
+                      Project QR
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
             <h3 className="font-semibold text-slate-900 text-sm mb-3">High-Risk Mentees</h3>
             <div className="space-y-3">

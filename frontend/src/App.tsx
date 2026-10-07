@@ -84,7 +84,7 @@ export default function App() {
           <Route
             path="/attendance/qr-fullscreen/:sessionId"
             element={
-              <ProtectedRoute requiredAnyPermissions={['attendance:mark:batch', 'sessions:read:any']}>
+              <ProtectedRoute requiredAnyPermissions={['attendance:mark:batch', 'sessions:read:any', 'sessions:read:assigned']}>
                 <QRFullscreen />
               </ProtectedRoute>
             }
@@ -168,7 +168,7 @@ export default function App() {
             <Route
               path="/attendance/overview"
               element={
-                <ProtectedRoute requiredAnyPermissions={['attendance:read:batch', 'attendance:read:any']}>
+                <ProtectedRoute requiredAnyPermissions={['attendance:read:batch', 'attendance:read:any', 'attendance:read:assigned']}>
                   <SessionAttendance />
                 </ProtectedRoute>
               }
@@ -176,7 +176,7 @@ export default function App() {
             <Route
               path="/attendance/session/:sessionId"
               element={
-                <ProtectedRoute requiredAnyPermissions={['attendance:read:batch', 'attendance:read:any']}>
+                <ProtectedRoute requiredAnyPermissions={['attendance:read:batch', 'attendance:read:any', 'attendance:read:assigned']}>
                   <SessionAttendance />
                 </ProtectedRoute>
               }
@@ -216,7 +216,7 @@ export default function App() {
             <Route
               path="/attendance/qr/:windowId"
               element={
-                <ProtectedRoute requiredPermission="attendance:mark:batch">
+                <ProtectedRoute requiredAnyPermissions={['attendance:mark:batch', 'sessions:read:assigned']}>
                   <QRFullscreen />
                 </ProtectedRoute>
               }
