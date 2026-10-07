@@ -32,8 +32,8 @@ Required:
 - `JWT_SECRET` — high-entropy secret
 - `TOKEN_HASH_SECRET` — separate high-entropy secret
 - `REDIS_URL` — Redis connection string
-- `FRONTEND_URL=https://<frontend-domain>`
-- `FRONTEND_URLS=https://<frontend-domain>` — semicolon-separated exact origins if multiple
+- `FRONTEND_URL` — optional at API startup; set to the frontend origin for activation/password-reset email links
+- `FRONTEND_URLS` — optional at API startup; semicolon-separated exact browser origins allowed by CORS
 - `ML_SERVICE_URL=http://${{ml-service.RAILWAY_PRIVATE_DOMAIN}}:${{ml-service.PORT}}`
 - `ML_SERVICE_AUTH_MODE=none` — valid only while ML stays private on Railway
 
@@ -45,7 +45,7 @@ The API also needs `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_P
 
 - `VITE_API_BASE_URL=https://${{backend-api.RAILWAY_PUBLIC_DOMAIN}}`
 
-This is a public build-time value embedded in the browser bundle, not a secret. Changing it triggers a rebuild. Keep the API's `FRONTEND_URL` and `FRONTEND_URLS` synchronized to the final frontend origin(s).
+This is a public build-time value embedded in the browser bundle, not a secret. Changing it triggers a rebuild. Once the frontend domain exists, set the API's `FRONTEND_URL` and `FRONTEND_URLS` to that exact origin (and any custom domain). Until then the backend can start, but CORS denies cross-origin browser requests and email-link endpoints report a clear configuration error rather than sending broken links.
 
 ### ML service
 

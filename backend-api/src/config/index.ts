@@ -11,11 +11,12 @@ function requireEnv(key: string): string {
   return value;
 }
 
-const frontendUrl = process.env.FRONTEND_URL || (
-  process.env.NODE_ENV === 'production' ? requireEnv('FRONTEND_URL') : 'http://localhost:5173'
-);
+// The frontend may be deployed after the API. Keep API startup independent of
+// its URL while retaining the local development default and exact CORS allowlist.
+const frontendUrl = process.env.FRONTEND_URL?.trim()
+  || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5173');
 const frontendUrls = [...new Set([
-  frontendUrl,
+  ...(frontendUrl ? [frontendUrl] : []),
   ...(process.env.FRONTEND_URLS || '').split(';').map((url) => url.trim()).filter(Boolean),
 ])];
 

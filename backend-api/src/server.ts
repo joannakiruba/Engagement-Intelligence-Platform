@@ -35,6 +35,10 @@ const app = express();
 
 app.set('trust proxy', 1);
 
+if (config.isProduction && config.frontendUrls.length === 0) {
+  logger.warn('FRONTEND_URL(S) not configured; cross-origin browser requests are denied until a frontend origin is added');
+}
+
 app.use(cors({
   origin: (origin, callback) => {
     // Requests without Origin are server-to-server or same-host tools; browsers

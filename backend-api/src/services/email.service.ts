@@ -45,6 +45,16 @@ function getTransporter(): Transporter {
   return transporter;
 }
 
+function getFrontendLink(path: string, token: string): string {
+  if (!config.frontendUrl) {
+    throw new Error('FRONTEND_URL must be configured before sending activation or password-reset emails');
+  }
+
+  const link = new URL(path, `${config.frontendUrl.replace(/\/+$/, '')}/`);
+  link.searchParams.set('token', token);
+  return link.toString();
+}
+
 interface ActivationEmailData {
   to: string;
   name: string;
@@ -53,7 +63,7 @@ interface ActivationEmailData {
 
 export async function sendActivationEmail(data: ActivationEmailData): Promise<void> {
   const { to, name, token } = data;
-  const activationUrl = `${config.frontendUrl}/activate?token=${token}`;
+  const activationUrl = getFrontendLink('/activate', token);
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -110,7 +120,7 @@ interface PasswordResetEmailData {
 
 export async function sendPasswordResetEmail(data: PasswordResetEmailData): Promise<void> {
   const { to, name, token } = data;
-  const resetUrl = `${config.frontendUrl}/reset-password?token=${token}`;
+  const resetUrl = getFrontendLink('/reset-password', token);
 
   const htmlContent = `
 <!DOCTYPE html>
