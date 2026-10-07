@@ -1,5 +1,5 @@
 // src/pages/auth/LoginPage.tsx
-import React, { useState, FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ShieldCheck, UserCheck, ArrowRight } from 'lucide-react';
@@ -15,8 +15,12 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    void submitCredentials();
+  }
+
+  async function submitCredentials() {
     setError('');
     setSubmitting(true);
     try {

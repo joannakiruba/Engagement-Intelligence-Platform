@@ -1,7 +1,8 @@
 import axios from 'axios';
 let accessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
-const baseURL = import.meta.env.VITE_API_BASE_URL || '/';
+const configuredBaseURL = import.meta.env.VITE_API_BASE_URL?.trim();
+const baseURL = configuredBaseURL ? configuredBaseURL.replace(/\/+$/, '') : '/';
 export function setAccessToken(token: string | null) { accessToken = token; localStorage.removeItem('hope_access_token'); }
 export function getAccessToken() { return accessToken; }
 export function getTokenPermissions(): string[] {
