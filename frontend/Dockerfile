@@ -14,4 +14,6 @@ RUN npm run build
 FROM nginx:1.27-alpine
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
+# Railway supplies PORT at runtime; keep 8080 as the local/container default.
+ENV PORT=8080
 EXPOSE 8080
