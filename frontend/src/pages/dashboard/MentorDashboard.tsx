@@ -99,13 +99,6 @@ export const MentorDashboard: React.FC = () => {
             Create Intervention
           </Link>
           <Link
-            to="/attendance/overview"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-teal-800 font-semibold text-sm hover:bg-teal-50 shadow-sm transition-all"
-          >
-            <QrCode className="w-4 h-4" />
-            Launch QR
-          </Link>
-          <Link
             to="/mentor-alerts"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-800/80 hover:bg-teal-900 text-white font-medium text-sm border border-teal-400/30 transition-all"
           >

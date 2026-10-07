@@ -58,6 +58,8 @@ export const TrainerDashboard: React.FC = () => {
   }
 
   const totalStudents = batches.reduce((acc, b) => acc + (b.memberCount || b.members?.length || 0), 0);
+  const today = new Date().toISOString().split('T')[0];
+  const todaySession = sessions.find((s: any) => s.scheduledDate?.startsWith(today));
 
   return (
     <div className="space-y-6">
@@ -74,13 +76,22 @@ export const TrainerDashboard: React.FC = () => {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <Link
-            to="/attendance/overview"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-amber-800 font-semibold text-sm hover:bg-amber-50 shadow-sm transition-all"
-          >
-            <QrCode className="w-4 h-4" />
-            Launch QR &amp; Sheets
-          </Link>
+          {todaySession ? (
+            <a
+              href={`/attendance/qr-fullscreen/${todaySession.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-amber-800 font-semibold text-sm hover:bg-amber-50 shadow-sm transition-all"
+            >
+              <QrCode className="w-4 h-4" />
+              Project QR — {todaySession.title}
+            </a>
+          ) : (
+            <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/40 text-white font-semibold text-sm cursor-not-allowed">
+              <QrCode className="w-4 h-4" />
+              No Session Today
+            </span>
+          )}
           <Link
             to="/assessments/create"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-800/80 hover:bg-amber-900 text-white font-medium text-sm border border-amber-400/30 transition-all"
@@ -217,45 +228,8 @@ export const TrainerDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* QR Attendance & Trainer Actions */}
+        {/* Trainer Actions */}
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <QrCode className="w-5 h-5 text-amber-600" />
-                <h3 className="font-semibold text-slate-900 text-sm">QR Attendance</h3>
-              </div>
-              <Link to="/attendance/overview" className="text-xs font-semibold text-amber-600 hover:text-amber-700">
-                All Sessions
-              </Link>
-            </div>
-            {sessions.length === 0 ? (
-              <p className="text-xs text-slate-500 py-4 text-center">No sessions found for your batches.</p>
-            ) : (
-              <div className="space-y-2">
-                {sessions.slice(0, 5).map((session: any) => (
-                  <div key={session.id} className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 bg-slate-50/50">
-                    <div className="min-w-0 flex-1 mr-2">
-                      <span className="text-xs font-semibold text-slate-900 block truncate">{session.title}</span>
-                      <span className="text-[11px] text-slate-500">
-                        {new Date(session.scheduledDate).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <a
-                      href={`/attendance/qr-fullscreen/${session.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors inline-flex items-center gap-1"
-                    >
-                      <QrCode className="w-3 h-3" />
-                      Project QR
-                    </a>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
             <h3 className="font-semibold text-slate-900 text-sm mb-3">Trainer Shortcuts</h3>
             <div className="space-y-2">

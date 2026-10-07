@@ -33,7 +33,7 @@ const router = Router();
 
 // Attendance windows
 router.post('/windows', requirePermission('attendance:mark:batch'), validate(createWindowSchema), createWindowHandler);
-router.get('/session/:sessionId/windows', requirePermission('attendance:read:batch', 'attendance:read:any'), getSessionWindowsHandler);
+router.get('/session/:sessionId/windows', requirePermission('attendance:read:batch', 'attendance:read:any', 'attendance:read:assigned'), getSessionWindowsHandler);
 
 // Student self-check-in (window time enforced server-side)
 router.post('/check-in', requirePermission('attendance:mark:self'), validate(checkInSchema), checkInHandler);
@@ -66,7 +66,7 @@ router.get('/session/:sessionId/export', requirePermission('attendance:export'),
 router.get('/batch/:batchId/export', requirePermission('attendance:export'), exportExcelHandler);
 
 // Generate time-rotating QR token for a window (trainer calls this)
-router.get('/window/:windowId/qr', requirePermission('attendance:mark:batch'), generateQRHandler);
+router.get('/window/:windowId/qr', requirePermission('attendance:mark:batch', 'attendance:read:batch', 'attendance:read:assigned'), generateQRHandler);
 
 // Get all excused records for trainer review (?batchId=&sessionId=&from=&to=)
 router.get('/excused', requirePermission('attendance:read:batch', 'attendance:read:any'), getExcusedRecordsHandler);

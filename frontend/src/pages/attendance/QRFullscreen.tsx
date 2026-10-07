@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { getWindowQR } from '../../services/attendance.service';
+import { getWindowQR, getSessionWindows } from '../../services/attendance.service';
 
 interface QRData {
   token: string;
@@ -20,16 +20,35 @@ interface QRData {
 
 export function QRFullscreen() {
   const { sessionId, windowId } = useParams<{ sessionId?: string; windowId?: string }>();
-  const idToUse = windowId || sessionId;
+  const [resolvedWindowId, setResolvedWindowId] = useState<string | null>(windowId || null);
   const [qrData, setQrData] = useState<QRData | null>(null);
   const [countdown, setCountdown] = useState(0);
   const [error, setError] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  useEffect(() => {
+    if (windowId) {
+      setResolvedWindowId(windowId);
+      return;
+    }
+    if (!sessionId) return;
+    getSessionWindows(sessionId)
+      .then((windows: any) => {
+        const list = Array.isArray(windows) ? windows : windows?.data ?? [];
+        if (list.length === 0) {
+          setError('No attendance window exists for this session. Create one from the attendance overview first.');
+          return;
+        }
+        const latest = list[list.length - 1];
+        setResolvedWindowId(latest.id);
+      })
+      .catch(() => setError('Failed to load attendance windows for this session.'));
+  }, [sessionId, windowId]);
+
   async function fetchQR() {
-    if (!idToUse) return;
+    if (!resolvedWindowId) return;
     try {
-      const res: any = await getWindowQR(idToUse);
+      const res: any = await getWindowQR(resolvedWindowId);
       const data = res?.data ?? res;
       if (!data?.token) throw new Error('No QR token received');
       setQrData(data);
@@ -41,10 +60,11 @@ export function QRFullscreen() {
   }
 
   useEffect(() => {
+    if (!resolvedWindowId) return;
     fetchQR();
     const refreshInterval = setInterval(fetchQR, 60 * 1000);
     return () => clearInterval(refreshInterval);
-  }, [idToUse]);
+  }, [resolvedWindowId]);
 
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
