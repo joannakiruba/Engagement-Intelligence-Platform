@@ -81,7 +81,7 @@ router.post(
 
 router.patch(
   '/:id/tasks/:taskId',
-  requirePermission('interventions:update:own'),
+  requirePermission('interventions:update:own', 'tasks:update:own'),
   validate(updateTaskSchema),
   ctrl.updateTask,
 );

@@ -28,6 +28,7 @@ export const updateInterventionSchema = Joi.object({
 export const completeInterventionSchema = Joi.object({
   outcome: Joi.string().valid('IMPROVED', 'NO_CHANGE', 'DECLINED').required(),
   remarks: Joi.string().trim().max(2000).allow('').optional(),
+  wasRecommendationFollowed: Joi.boolean().optional(),
 });
 
 export const editOutcomeSchema = Joi.object({

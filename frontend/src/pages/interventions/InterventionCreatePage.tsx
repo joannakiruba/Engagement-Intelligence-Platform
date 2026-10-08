@@ -14,6 +14,7 @@ export const InterventionCreatePage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedStudentId = searchParams.get('studentId') || '';
+  const preselectedAlertId = searchParams.get('alertId') || '';
 
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(true);
@@ -29,8 +30,13 @@ export const InterventionCreatePage: React.FC = () => {
     getInterventionAlerts().then(rows => {
       const eligible = preselectedStudentId ? rows.filter(a => a.student_id === preselectedStudentId) : rows;
       setAlerts(eligible);
+      if (preselectedAlertId && eligible.some((a) => String(a.id) === preselectedAlertId)) {
+        setAlertId(preselectedAlertId);
+        const causes = eligible.find((a) => String(a.id) === preselectedAlertId)?.causes || [];
+        if (causes.length) setCauseCode(causes[0].cause_code);
+      }
     }).catch(err => setError(err?.response?.data?.error || 'Could not load mentor alerts')).finally(() => setLoadingStudents(false));
-  }, [preselectedStudentId]);
+  }, [preselectedStudentId, preselectedAlertId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -35,8 +35,18 @@ export async function addInterventionUpdate(id: string, note: string): Promise<{
   return res.data.data;
 }
 
-export async function logInterventionOutcome(id: string, outcome: 'IMPROVED' | 'NO_CHANGE' | 'DECLINED', remarks?: string) {
-  const res = await api.post(`/api/interventions/${id}/complete`, { outcome, remarks });
+export async function logInterventionOutcome(id: string, outcome: 'IMPROVED' | 'NO_CHANGE' | 'DECLINED', remarks?: string, wasRecommendationFollowed?: boolean) {
+  const res = await api.post(`/api/interventions/${id}/complete`, { outcome, remarks, wasRecommendationFollowed });
+  return res.data.data;
+}
+
+export async function createInterventionTask(id: string, data: { title: string; description?: string; deadline?: string }) {
+  const res = await api.post(`/api/interventions/${id}/tasks`, data);
+  return res.data.data;
+}
+
+export async function updateInterventionTask(id: string, taskId: string, isCompleted: boolean) {
+  const res = await api.patch(`/api/interventions/${id}/tasks/${taskId}`, { isCompleted });
   return res.data.data;
 }
 

@@ -95,6 +95,7 @@ describe('queueMentorAlert', () => {
     studentName: 'Charlie',
     riskLevel: 'HIGH',
     riskScore: 75,
+    riskScoreId: 'risk-1',
   };
 
   it('adds job to mentor-alert queue', async () => {
@@ -103,7 +104,7 @@ describe('queueMentorAlert', () => {
       'mentor-alert',
       data,
       expect.objectContaining({
-        jobId: expect.stringContaining('mentor-alert-stu-1-'),
+        jobId: 'mentor-alert-risk-1-mentor-1',
       }),
     );
   });
@@ -135,7 +136,7 @@ describe('queueWeeklyReport', () => {
 describe('closeQueues', () => {
   it('closes all queues and redis', async () => {
     await closeQueues();
-    expect(mockClose).toHaveBeenCalledTimes(4);
+    expect(mockClose).toHaveBeenCalledTimes(5);
     expect(mockQuit).toHaveBeenCalledTimes(1);
   });
 });

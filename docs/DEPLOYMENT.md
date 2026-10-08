@@ -155,9 +155,18 @@ gcloud scheduler jobs create http eip-overdue-check \
   --http-method=POST \
   --oidc-service-account-email="$SCHEDULER_SA" \
   --oidc-token-audience="$WORKER_URL"
+
+gcloud scheduler jobs create http eip-mentor-alert-recovery \
+  --location "$REGION" \
+  --schedule="*/15 * * * *" \
+  --time-zone="Etc/UTC" \
+  --uri="${WORKER_URL}/internal/scheduler/mentor-alert-recovery" \
+  --http-method=POST \
+  --oidc-service-account-email="$SCHEDULER_SA" \
+  --oidc-token-audience="$WORKER_URL"
 ```
 
-The weekly trigger queues one report per mentor and uses the original scheduler time to select the completed reporting week. The overdue endpoint uses the scheduled hour in its stable BullMQ job ID so Cloud Scheduler retries do not enqueue duplicate scans for that hour.
+The weekly trigger queues one report per mentor and uses the original scheduler time to select the completed reporting week. The overdue endpoint uses the scheduled hour in its stable BullMQ job ID so Cloud Scheduler retries do not enqueue duplicate scans for that hour. The mentor-alert recovery endpoint periodically requeues the latest score snapshots in each batch; the ML service's unique risk-snapshot index makes replay safe and recovers from a transient Redis outage during score creation.
 
 ## 6. Build and deploy Firebase Hosting
 
@@ -175,7 +184,7 @@ The repo's `firebase.json` rewrites `/api`, `/auth`, `/users`, `/admin/users`, a
 2. Refresh the page or call an authenticated API route. Confirm `/auth/refresh` sends the cookie and rotates it, and logout clears it with the same path and attributes.
 3. Confirm direct requests to the ML `run.app` URL without an ID token receive `401` or `403`; confirm an ML-backed API operation succeeds through the API.
 4. Confirm the API's CORS response permits the exact Firebase/custom origins and does not return `Access-Control-Allow-Origin` for an unlisted origin.
-5. Check Cloud Run logs for metadata token errors, ML `401/403`, Redis failures, database pool exhaustion, and worker restarts. Confirm both Scheduler jobs report successful executions.
+5. Check Cloud Run logs for metadata token errors, ML `401/403`, Redis failures, database pool exhaustion, and worker restarts. Confirm all Scheduler jobs report successful executions.
 
 ## Manual setup still required
 

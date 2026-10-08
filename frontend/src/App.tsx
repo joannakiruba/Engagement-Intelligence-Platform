@@ -85,14 +85,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/attendance/assigned"
-            element={
-              <ProtectedRoute requiredPermission="attendance:read:assigned">
-                <AssignedAttendanceWindows />
-              </ProtectedRoute>
-            }
-          />
 
           {/* Main App with Shared Navigation Layout */}
           <Route
@@ -198,6 +190,14 @@ export default function App() {
               element={
                 <ProtectedRoute requiredPermission="attendance:update:batch">
                   <ExcusedReview />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/attendance/assigned"
+              element={
+                <ProtectedRoute requiredPermission="attendance:read:assigned">
+                  <AssignedAttendanceWindows />
                 </ProtectedRoute>
               }
             />

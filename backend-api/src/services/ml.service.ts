@@ -191,6 +191,7 @@ export { buildPayload, validatePrediction, validateProbabilities };
 // ── Smart Mentor Alert client (Module 14) ──
 
 export interface MentorAlert {
+  id?: number;
   student_id: string;
   student_name: string;
   mentor_id: string;

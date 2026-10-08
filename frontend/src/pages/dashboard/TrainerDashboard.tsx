@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { StatCard } from '../../components/common/StatCard';
 import { LoadingState } from '../../components/common/LoadingState';
+import { QuickAttendanceCard } from '../../components/trainer/QuickAttendanceCard';
 import { getBatches } from '../../services/batches.service';
 import { getAssessments } from '../../services/assessments.service';
 import { getExcusedAttendance } from '../../services/attendance.service';
@@ -118,8 +119,14 @@ export const TrainerDashboard: React.FC = () => {
         />
       </div>
 
-      {/* Batches Overview */}
+      {/* Quick Attendance & Batches Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Quick Attendance */}
+        <div>
+          <QuickAttendanceCard />
+        </div>
+
+        {/* Main Content Area */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
             <div className="flex items-center justify-between mb-4">
@@ -211,46 +218,44 @@ export const TrainerDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Quick Trainer Actions */}
-        <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-            <h3 className="font-semibold text-slate-900 text-sm mb-3">Trainer Shortcuts</h3>
-            <div className="space-y-2">
-              <Link
-                to="/attendance/excused"
-                className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <CalendarCheck className="w-4 h-4 text-amber-600" />
-                  <span>Review Excused Absences</span>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-              </Link>
-
-              <Link
-                to="/feedback/create"
-                className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-emerald-600" />
-                  <span>Submit Session Feedback</span>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-              </Link>
-
-              <Link
-                to="/leaderboard"
-                className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Award className="w-4 h-4 text-purple-600" />
-                  <span>Module 18 High-Achiever Leaderboard</span>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-              </Link>
+      {/* Trainer Quick Actions */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+        <h3 className="font-semibold text-slate-900 text-sm mb-3">Quick Actions</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Link
+            to="/attendance/excused"
+            className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <CalendarCheck className="w-4 h-4 text-amber-600" />
+              <span>Review Excused Absences</span>
             </div>
-          </div>
+            <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+          </Link>
+
+          <Link
+            to="/feedback/create"
+            className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-emerald-600" />
+              <span>Submit Session Feedback</span>
+            </div>
+            <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+          </Link>
+
+          <Link
+            to="/leaderboard"
+            className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Award className="w-4 h-4 text-purple-600" />
+              <span>High-Achiever Leaderboard</span>
+            </div>
+            <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+          </Link>
         </div>
       </div>
     </div>

@@ -61,14 +61,14 @@ async def generate_alerts(
         alerts.append(alert)
 
     alerts.sort(key=lambda a: a.priority_score, reverse=True)
-    features_map = {f.student_id: f for f in high_risk}
-    await _persist_alerts(pool, alerts, features_map)
+    features_map = {(f.student_id, f.batch_id): f for f in high_risk}
+    persisted_alerts = await _persist_alerts(pool, alerts, features_map)
 
     return GenerateAlertsResponse(
         total_students_analyzed=len(all_features),
-        alerts_generated=len(alerts),
-        alerts_filtered=filtered_count,
-        alerts=alerts,
+        alerts_generated=len(persisted_alerts),
+        alerts_filtered=filtered_count + len(alerts) - len(persisted_alerts),
+        alerts=persisted_alerts,
     )
 
 
@@ -115,33 +115,55 @@ def _derive_cause_codes(features: StudentFeatures) -> list[dict]:
     return causes
 
 
-async def _persist_alerts(pool: asyncpg.Pool, alerts: list[MentorAlert], features_map: dict[str, StudentFeatures] | None = None) -> None:
+async def _persist_alerts(pool: asyncpg.Pool, alerts: list[MentorAlert], features_map: dict[tuple[str, str | None], StudentFeatures] | None = None) -> list[MentorAlert]:
     if not alerts:
-        return
+        return []
+    persisted: list[MentorAlert] = []
     async with pool.acquire() as conn:
         for alert in alerts:
-            row = await conn.fetchrow("""
+            source = features_map.get((alert.student_id, alert.batch_id)) if features_map else None
+            if not source or not source.current_risk_score_id:
+                # Do not persist alerts that cannot be made replay-safe.
+                continue
+            async with conn.transaction():
+                row = await conn.fetchrow("""
                 INSERT INTO ml_mentor_alerts (
                     student_id, mentor_id, batch_id,
                     priority_score, urgency_tier, trigger_reason,
                     risk_score, risk_velocity,
                     recommended_intervention, recommendation_confidence,
-                    recommendation_reasoning, alert_status, created_at
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                    recommendation_reasoning, alert_status, created_at,
+                    source_risk_score_id
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                ON CONFLICT (student_id, batch_id, source_risk_score_id)
+                    WHERE source_risk_score_id IS NOT NULL DO NOTHING
                 RETURNING id
-            """, alert.student_id, alert.mentor_id, alert.batch_id,
-                alert.priority_score, alert.urgency_tier.value, alert.trigger_reason,
-                alert.risk_score, alert.risk_velocity,
-                alert.recommended_intervention, alert.recommendation_confidence,
-                alert.recommendation_reasoning, "pending", alert.created_at)
-            alert_id = row["id"]
-            if features_map and alert.student_id in features_map:
-                causes = _derive_cause_codes(features_map[alert.student_id])
-                for cause in causes:
-                    await conn.execute("""
-                        INSERT INTO ml_alert_causes (alert_id, cause_code, evidence)
-                        VALUES ($1, $2, $3::jsonb)
-                    """, alert_id, cause["cause_code"], json.dumps(cause["evidence"]))
+                """, alert.student_id, alert.mentor_id, alert.batch_id,
+                    alert.priority_score, alert.urgency_tier.value, alert.trigger_reason,
+                    alert.risk_score, alert.risk_velocity,
+                    alert.recommended_intervention, alert.recommendation_confidence,
+                    alert.recommendation_reasoning, "pending", alert.created_at,
+                source.current_risk_score_id)
+                if not row:
+                    # Replay after ML persistence but before backend notification
+                    # delivery must return the same alert so notification repair can run.
+                    existing = await conn.fetchrow("""
+                        SELECT id FROM ml_mentor_alerts
+                        WHERE student_id = $1 AND batch_id = $2 AND source_risk_score_id = $3
+                    """, alert.student_id, alert.batch_id, source.current_risk_score_id)
+                    if not existing:
+                        continue
+                    alert_id = existing["id"]
+                else:
+                    alert_id = row["id"]
+                    causes = _derive_cause_codes(source)
+                    for cause in causes:
+                        await conn.execute("""
+                            INSERT INTO ml_alert_causes (alert_id, cause_code, evidence)
+                            VALUES ($1, $2, $3::jsonb)
+                            """, alert_id, cause["cause_code"], json.dumps(cause["evidence"]))
+            persisted.append(alert.model_copy(update={"id": alert_id}))
+    return persisted
 
 
 async def get_alerts_for_mentor(pool: asyncpg.Pool, mentor_id: str) -> list[dict]:

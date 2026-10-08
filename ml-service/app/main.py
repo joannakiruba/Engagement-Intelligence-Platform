@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
         DATABASE_URL,
         min_size=DB_POOL_MIN_SIZE,
         max_size=DB_POOL_MAX_SIZE,
+        statement_cache_size=0,  # Required for pgbouncer compatibility
     )
     app.state.db_pool = pool
     set_pool(pool)

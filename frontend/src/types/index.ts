@@ -160,6 +160,8 @@ export interface MentorAlert {
   status: 'pending' | 'seen' | 'acted' | 'dismissed';
   createdAt: string;
   student?: User;
+  causes?: { id: number; cause_code: string; evidence?: Record<string, unknown> }[];
+  interventions?: { id: string; causeCode: string; status: string; title: string }[];
   outcome?: {
     mentorResponse: 'acted' | 'dismissed' | 'ignored';
     responseTimeHours?: number;
@@ -182,6 +184,7 @@ export interface Intervention {
   student?: User;
   mentor?: User;
   riskScore?: RiskScore;
+  tasks?: { id: string; title: string; description?: string | null; deadline?: string | null; isCompleted: boolean; completedAt?: string | null }[];
   updates: { id: string; note: string; createdAt: string }[];
   outcome?: {
     id: string;

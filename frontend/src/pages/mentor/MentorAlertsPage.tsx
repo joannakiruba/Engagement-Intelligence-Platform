@@ -1,7 +1,9 @@
 // src/pages/mentor/MentorAlertsPage.tsx
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { getMentorAlerts, updateAlertStatus, recordAlertOutcome } from '../../services/mentor.service';
+import { getInterventionAlerts } from '../../services/interventions.service';
+import { recordAlertOutcome, updateAlertStatus } from '../../services/mentor.service';
 import { MentorAlert } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { LoadingState } from '../../components/common/LoadingState';
@@ -38,8 +40,20 @@ export const MentorAlertsPage: React.FC = () => {
       setLoading(true);
       setError(null);
       // If mentor or admin, load alerts
-      const res = await getMentorAlerts(user.id);
-      setAlerts(res);
+      const rows = await getInterventionAlerts();
+      setAlerts(rows.map((row: any) => ({
+        ...row,
+        mentorId: row.mentor_id,
+        studentId: row.student_id,
+        riskScore: row.risk_score,
+        riskCategory: row.urgency_tier,
+        suggestedAction: row.recommended_intervention,
+        status: row.alert_status,
+        createdAt: row.created_at,
+        student: { id: row.student_id, name: row.student_name },
+        causes: row.causes || [],
+        interventions: row.interventions || [],
+      })));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -175,6 +189,24 @@ export const MentorAlertsPage: React.FC = () => {
                 {alert.suggestedAction}
               </div>
 
+              {!!alert.causes?.length && (
+                <p className="text-xs text-slate-600">
+                  Evidence: {alert.causes.map((cause: any) => {
+                    const details = Object.entries(cause.evidence || {}).map(([key, value]) => `${key.replaceAll('_', ' ')}: ${value}`).join('; ');
+                    return `${cause.cause_code.replaceAll('_', ' ')}${details ? ` (${details})` : ''}`;
+                  }).join(' · ')}
+                </p>
+              )}
+              {!!alert.interventions?.length && (
+                <div className="space-y-1 text-xs">
+                  {alert.interventions.map((intervention: any) => (
+                    <Link key={intervention.id} to={`/interventions/${intervention.id}`} className="block font-semibold text-teal-700 hover:underline">
+                      Active intervention: {intervention.title} ({intervention.status})
+                    </Link>
+                  ))}
+                </div>
+              )}
+
               {/* Outcome if already recorded */}
               {alert.outcome && (
                 <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
@@ -196,7 +228,7 @@ export const MentorAlertsPage: React.FC = () => {
                       <Clock className="w-3.5 h-3.5" /> Mark Seen
                     </button>
                   )}
-                  {alert.status !== 'dismissed' && (
+                  {alert.status !== 'dismissed' && alert.status !== 'acted' && (
                     <button
                       onClick={() => handleStatusChange(alert.id, 'dismissed')}
                       className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 text-xs font-medium"
@@ -207,11 +239,16 @@ export const MentorAlertsPage: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {!alert.interventions?.length && !!alert.causes?.length && (
+                    <Link to={`/interventions/create?alertId=${alert.id}&studentId=${alert.studentId}`} className="px-3.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs">
+                      Start intervention <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  )}
                   <button
                     onClick={() => handleOpenOutcome(alert)}
                     className="px-3.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
                   >
-                    <CheckCircle className="w-3.5 h-3.5" /> Log Mentor Action / Outcome
+                    <CheckCircle className="w-3.5 h-3.5" /> Log Alert Response
                   </button>
                 </div>
               </div>
@@ -224,7 +261,7 @@ export const MentorAlertsPage: React.FC = () => {
       <Modal
         isOpen={outcomeModalOpen}
         onClose={() => setOutcomeModalOpen(false)}
-        title="Record Alert Outcome &amp; Counseling Response"
+        title="Record Alert Response"
       >
         <form onSubmit={handleSubmitOutcome} className="space-y-4 text-xs">
           <div>
@@ -266,7 +303,7 @@ export const MentorAlertsPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">Outcome &amp; Counseling Notes</label>
+            <label className="block font-semibold text-slate-700 mb-1">Alert response notes</label>
             <textarea
               rows={3}
               value={outcomeNotes}
@@ -289,7 +326,7 @@ export const MentorAlertsPage: React.FC = () => {
               disabled={submittingOutcome}
               className="px-4 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold flex items-center gap-1.5 shadow-xs"
             >
-              <Send className="w-3.5 h-3.5" /> Save Outcome
+              <Send className="w-3.5 h-3.5" /> Save Response
             </button>
           </div>
         </form>

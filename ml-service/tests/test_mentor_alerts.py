@@ -1,11 +1,15 @@
 """Tests for the Mentor Alert System ML models."""
 
 import pytest
-from app.models.alert_models import StudentFeatures, UrgencyTier
+from app.models.alert_models import MentorAlert, StudentFeatures, UrgencyTier
 from app.mentor_alerts.priority_scorer import score_priority
 from app.mentor_alerts.fatigue_filter import check_fatigue_filter, _to_vector
 from app.mentor_alerts.intervention_recommender import recommend_intervention
 from datetime import datetime, timedelta
+import asyncio
+
+from app.mentor_alerts.feature_builder import build_features_for_all_students
+from app.mentor_alerts.alert_generator import _persist_alerts
 
 
 def _make_student(**overrides) -> StudentFeatures:
@@ -149,3 +153,103 @@ class TestInterventionRecommender:
         ]
         for s in students:
             assert 0 <= recommend_intervention(s).confidence <= 1
+
+
+def test_batch_feature_query_uses_stored_role_name_and_single_batch_parameter():
+    class Connection:
+        query = None
+        args = None
+
+        async def fetch(self, query, *args):
+            self.query = query
+            self.args = args
+            return []
+
+    class Acquire:
+        def __init__(self, connection):
+            self.connection = connection
+
+        async def __aenter__(self):
+            return self.connection
+
+        async def __aexit__(self, *_):
+            return False
+
+    class Pool:
+        def __init__(self):
+            self.connection = Connection()
+
+        def acquire(self):
+            return Acquire(self.connection)
+
+    pool = Pool()
+    result = asyncio.run(build_features_for_all_students(pool, "batch-123"))
+
+    assert result == []
+    assert "r.name = 'STUDENT'" in pool.connection.query
+    assert 'bm."batchId" = $1' in pool.connection.query
+    assert pool.connection.args == ("batch-123",)
+
+
+def test_alert_persistence_is_idempotent_for_a_risk_snapshot():
+    class Transaction:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+    class Connection:
+        inserted = False
+        causes = 0
+
+        def transaction(self):
+            return Transaction()
+
+        async def fetchrow(self, query, *args):
+            if query.lstrip().startswith("SELECT id"):
+                return {"id": 42} if self.inserted else None
+            assert "ON CONFLICT" in query
+            if self.inserted:
+                return None
+            self.inserted = True
+            return {"id": 42}
+
+        async def execute(self, *_):
+            self.causes += 1
+
+    class Acquire:
+        def __init__(self, connection):
+            self.connection = connection
+
+        async def __aenter__(self):
+            return self.connection
+
+        async def __aexit__(self, *_):
+            return False
+
+    class Pool:
+        def __init__(self):
+            self.connection = Connection()
+
+        def acquire(self):
+            return Acquire(self.connection)
+
+    student = _make_student(
+        student_id="s1", batch_id="b1", risk_level="HIGH", current_risk_score=80,
+        current_risk_score_id="risk-score-1", attendance_pct_4w=50,
+    )
+    alert = MentorAlert(
+        student_id="s1", student_name="Test Student", mentor_id="m1", mentor_name="Test Mentor",
+        batch_id="b1", batch_name="Batch A", priority_score=80, urgency_tier=UrgencyTier.HIGH,
+        trigger_reason="ESCALATED", risk_score=80, risk_velocity=20,
+        recommended_intervention="one_on_one_meeting", recommendation_confidence=0.9,
+        recommendation_reasoning="Support", contributing_factors=[], created_at=datetime.utcnow(),
+    )
+    pool = Pool()
+    first = asyncio.run(_persist_alerts(pool, [alert], {("s1", "b1"): student}))
+    replay = asyncio.run(_persist_alerts(pool, [alert], {("s1", "b1"): student}))
+
+    assert first[0].id == 42
+    assert len(replay) == 1 and replay[0].id == 42
+    assert pool.connection.causes == 1

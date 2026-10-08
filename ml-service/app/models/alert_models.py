@@ -35,6 +35,7 @@ class StudentFeatures(BaseModel):
     effort_rating_avg: float = 0.0
     participation_rating_avg: float = 0.0
     current_risk_score: float = 0.0
+    current_risk_score_id: Optional[str] = None
     previous_risk_score: float = 0.0
     risk_level: str = "LOW"
     risk_velocity: float = 0.0
@@ -63,6 +64,7 @@ class InterventionRecommendation(BaseModel):
 
 
 class MentorAlert(BaseModel):
+    id: Optional[int] = None
     student_id: str
     student_name: str
     mentor_id: str

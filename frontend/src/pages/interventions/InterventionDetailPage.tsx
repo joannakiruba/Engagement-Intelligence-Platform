@@ -7,6 +7,8 @@ import {
   updateIntervention,
   addInterventionUpdate,
   logInterventionOutcome,
+  createInterventionTask,
+  updateInterventionTask,
 } from '../../services/interventions.service';
 import { Intervention } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -41,9 +43,13 @@ export const InterventionDetailPage: React.FC = () => {
   const [outcomeType, setOutcomeType] = useState<'IMPROVED' | 'NO_CHANGE' | 'DECLINED'>('IMPROVED');
   const [outcomeRemarks, setOutcomeRemarks] = useState('');
   const [submittingOutcome, setSubmittingOutcome] = useState(false);
+  const [recommendationFollowed, setRecommendationFollowed] = useState(true);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [submittingTask, setSubmittingTask] = useState(false);
 
   const canEdit = hasPermission('interventions:update:own') && (user?.id === intervention?.mentorId || user?.role === 'ADMIN');
   const canLogOutcome = hasPermission('interventions:log_outcome:own') && (user?.id === intervention?.mentorId || user?.role === 'ADMIN');
+  const canCompleteOwnTasks = hasPermission('tasks:update:own') && user?.id === intervention?.studentId;
 
   const loadData = async () => {
     if (!id) return;
@@ -83,13 +89,38 @@ export const InterventionDetailPage: React.FC = () => {
     if (!id) return;
     try {
       setSubmittingOutcome(true);
-      await logInterventionOutcome(id, outcomeType, outcomeRemarks);
+      await logInterventionOutcome(id, outcomeType, outcomeRemarks, recommendationFollowed);
       setOutcomeModalOpen(false);
       await loadData();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setSubmittingOutcome(false);
+    }
+  };
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !newTaskTitle.trim()) return;
+    try {
+      setSubmittingTask(true);
+      await createInterventionTask(id, { title: newTaskTitle.trim() });
+      setNewTaskTitle('');
+      await loadData();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSubmittingTask(false);
+    }
+  };
+
+  const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
+    if (!id) return;
+    try {
+      await updateInterventionTask(id, taskId, isCompleted);
+      await loadData();
+    } catch (err) {
+      setError(getErrorMessage(err));
     }
   };
 
@@ -211,8 +242,28 @@ export const InterventionDetailPage: React.FC = () => {
           </div>
         )}
 
-        {/* Progress Notes Timeline */}
-        <div className="pt-4 border-t border-slate-100">
+        {/* Intervention action items */}
+        <section className="pt-4 border-t border-slate-100">
+          <h3 className="text-sm font-bold text-slate-900 mb-3">Action Items ({intervention.tasks?.length || 0})</h3>
+          {canEdit && !['COMPLETED', 'CANCELLED'].includes(intervention.status) && (
+            <form onSubmit={handleCreateTask} className="mb-4 flex gap-2">
+              <input value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} className="flex-1 text-xs p-2 rounded-lg border border-slate-200" placeholder="Add a recovery action item" />
+              <button disabled={submittingTask || !newTaskTitle.trim()} className="px-3 py-2 rounded-lg bg-teal-600 text-white text-xs font-semibold disabled:opacity-50">Add task</button>
+            </form>
+          )}
+          <div className="space-y-2">
+            {(intervention.tasks || []).length === 0 ? <p className="text-xs text-slate-400">No action items assigned yet.</p> : (intervention.tasks || []).map((task: any) => (
+              <label key={task.id} className="flex items-start gap-2 rounded-lg border border-slate-100 p-3 text-xs">
+                {canCompleteOwnTasks && intervention.status !== 'COMPLETED' && intervention.status !== 'CANCELLED' && <input type="checkbox" checked={task.isCompleted} onChange={(e) => handleTaskToggle(task.id, e.target.checked)} className="mt-0.5" />}
+                <span className={task.isCompleted ? 'text-slate-400 line-through' : 'text-slate-800'}>{task.title}{task.description && <span className="block mt-1 text-slate-500">{task.description}</span>}</span>
+                {task.deadline && <span className="ml-auto text-slate-500">Due {new Date(task.deadline).toLocaleDateString()}</span>}
+              </label>
+            ))}
+          </div>
+        </section>
+
+        {/* Progress Notes Timeline is mentor-only; students receive a redacted response from the API. */}
+        {canEdit && <div className="pt-4 border-t border-slate-100">
           <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-indigo-600" />
             Weekly Progress Updates ({intervention.updates?.length || 0})
@@ -257,7 +308,7 @@ export const InterventionDetailPage: React.FC = () => {
               ))
             )}
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* Outcome Modal */}
@@ -280,6 +331,12 @@ export const InterventionDetailPage: React.FC = () => {
             </select>
           </div>
 
+          <div>
+            <label className="flex items-center gap-2 text-slate-700">
+              <input type="checkbox" checked={recommendationFollowed} onChange={(e) => setRecommendationFollowed(e.target.checked)} />
+              The mentor recommendation was followed
+            </label>
+          </div>
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Remarks &amp; Closing Assessment</label>
             <textarea

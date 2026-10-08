@@ -69,11 +69,22 @@ export const overdueCheckQueue = new Queue('overdue-check', {
   },
 });
 
+// ML risk-alert generation is a distinct workflow from sending alert emails.
+export const mentorAlertGenerationQueue = new Queue('mentor-alert-generation', {
+  ...defaultQueueOptions,
+  defaultJobOptions: {
+    ...defaultQueueOptions.defaultJobOptions,
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+  },
+});
+
 // Graceful shutdown
 export async function closeQueues(): Promise<void> {
   await Promise.all([
     emailQueue.close(),
     mentorAlertQueue.close(),
+    mentorAlertGenerationQueue.close(),
     weeklyReportQueue.close(),
     overdueCheckQueue.close(),
     redisConnection.quit(),
@@ -104,6 +115,7 @@ export interface PasswordResetEmailJob {
 }
 
 export interface MentorAlertJob {
+  riskScoreId?: string;
   mentorId: string;
   mentorEmail: string;
   mentorName: string;
@@ -113,6 +125,11 @@ export interface MentorAlertJob {
   riskScore: number;
   factors?: Record<string, unknown>;
   interventionLink?: string;
+}
+
+export interface MentorAlertGenerationJob {
+  batchId: string;
+  triggerId: string;
 }
 
 export interface WeeklyReportJob {
@@ -138,9 +155,25 @@ export async function queuePasswordResetEmail(data: PasswordResetEmailJob): Prom
 
 export async function queueMentorAlert(data: MentorAlertJob): Promise<void> {
   await mentorAlertQueue.add('mentor-alert', data, {
-    jobId: `mentor-alert-${data.studentId}-${Date.now()}`,
+    jobId: data.riskScoreId
+      ? `mentor-alert-${data.riskScoreId}-${data.mentorId}`
+      : `mentor-alert-${data.studentId}-${Date.now()}`,
   });
   logger.info('Mentor alert queued', { mentorId: data.mentorId, studentId: data.studentId });
+}
+
+export async function queueMentorAlertGeneration(batchId: string, triggerId: string): Promise<void> {
+  await mentorAlertGenerationQueue.add('generate-mentor-alerts', { batchId, triggerId }, {
+    jobId: `mentor-alert-generation-${batchId}-${triggerId}`,
+  });
+  logger.info('ML mentor-alert generation queued', { batchId, triggerId });
+}
+
+/** Re-enqueue the latest risk snapshot for a batch (safe because ML writes are idempotent). */
+export async function requeueMentorAlertGeneration(batchId: string, triggerId: string): Promise<void> {
+  await mentorAlertGenerationQueue.add('generate-mentor-alerts', { batchId, triggerId }, {
+    jobId: `mentor-alert-recovery-${batchId}-${triggerId}-${Math.floor(Date.now() / 900_000)}`,
+  });
 }
 
 export async function queueWeeklyReport(data: WeeklyReportJob): Promise<void> {

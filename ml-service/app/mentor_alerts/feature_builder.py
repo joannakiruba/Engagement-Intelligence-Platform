@@ -18,10 +18,9 @@ async def build_features_for_all_students(
     four_weeks_ago = datetime.utcnow() - timedelta(weeks=4)
     eight_weeks_ago = datetime.utcnow() - timedelta(weeks=8)
 
-    batch_filter = "AND bm.\"batchId\" = $2" if batch_id else ""
-    params: list = [four_weeks_ago]
-    if batch_id:
-        params.append(batch_id)
+    # Role names are stored as uppercase enum-like strings (e.g. STUDENT).
+    # The optional batch filter is the only bind parameter in this query.
+    batch_filter = 'AND bm."batchId" = $1' if batch_id else ""
 
     async with pool.acquire() as conn:
         students = await conn.fetch(f"""
@@ -34,9 +33,9 @@ async def build_features_for_all_students(
             JOIN batch_members bm ON bm."studentId" = u.id
             JOIN batches b ON b.id = bm."batchId"
             JOIN roles r ON r.id = u."roleId"
-            WHERE r.name = 'student'
+            WHERE r.name = 'STUDENT'
             {batch_filter}
-        """, *params[1:] if batch_id else [])
+        """, *([batch_id] if batch_id else []))
 
         features_list = []
         for student in students:
@@ -83,6 +82,7 @@ async def _build_single_student_features(
         effort_rating_avg=feedback["effort_avg"],
         participation_rating_avg=feedback["participation_avg"],
         current_risk_score=risk["current_score"],
+        current_risk_score_id=risk["current_risk_score_id"],
         previous_risk_score=risk["previous_score"],
         risk_level=risk["risk_level"],
         risk_velocity=risk_velocity,
@@ -228,7 +228,7 @@ async def _get_feedback_features(
 
 async def _get_risk_features(conn: asyncpg.Connection, student_id: str) -> dict:
     scores = await conn.fetch("""
-        SELECT "totalScore", "riskLevel", "generatedAt"
+        SELECT id, "totalScore", "riskLevel", "generatedAt"
         FROM risk_scores
         WHERE "studentId" = $1
         ORDER BY "generatedAt" DESC
@@ -238,6 +238,7 @@ async def _get_risk_features(conn: asyncpg.Connection, student_id: str) -> dict:
     if not scores:
         return {
             "current_score": 0.0,
+            "current_risk_score_id": None,
             "previous_score": 0.0,
             "risk_level": "LOW",
             "weeks_at_high": 0,
@@ -256,6 +257,7 @@ async def _get_risk_features(conn: asyncpg.Connection, student_id: str) -> dict:
 
     return {
         "current_score": current_score,
+        "current_risk_score_id": str(scores[0]["id"]),
         "previous_score": previous_score,
         "risk_level": risk_level,
         "weeks_at_high": weeks_at_high,

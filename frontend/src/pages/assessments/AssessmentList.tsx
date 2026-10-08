@@ -113,16 +113,24 @@ export function AssessmentList() {
                   </td>
                   {canUpload && (
                     <td className="px-4 py-3 text-sm text-right space-x-2">
-                      {canManage && <Link
-                        to={`/assessments/${a.id}/scores`}
-                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded bg-indigo-50"
-                      >Scores</Link>}
+                      {/* Always show View Scores button */}
                       <Link
-                        to={`/assessments/${a.id}/upload`}
-                        className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-2 py-1 rounded bg-emerald-50"
+                        to={`/assessments/${a.id}`}
+                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded bg-indigo-50"
                       >
-                        Upload CSV
+                        View Scores
                       </Link>
+
+                      {/* Only show Upload CSV if no scores exist yet */}
+                      {(!a.resultCount || a.resultCount === 0) && (
+                        <Link
+                          to={`/assessments/${a.id}/upload`}
+                          className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-2 py-1 rounded bg-emerald-50"
+                        >
+                          Upload CSV
+                        </Link>
+                      )}
+
                       {canManage && <button
                         onClick={() => handleDelete(a.id)}
                         className="text-xs font-medium text-rose-600 hover:text-rose-800 px-2 py-1 rounded bg-rose-50"

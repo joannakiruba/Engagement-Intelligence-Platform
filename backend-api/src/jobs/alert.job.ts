@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 import { sendMentorAlert } from '../services/email.service';
 import { generateMentorAlerts } from '../services/ml.service';
 import prisma from '../lib/prisma';
-import type { MentorAlertJob } from './queue';
+import type { MentorAlertGenerationJob, MentorAlertJob } from './queue';
 
 const redisConnection = createRedisConnection({
   maxRetriesPerRequest: null,
@@ -53,6 +53,14 @@ export const mentorAlertWorker = new Worker<MentorAlertJob>(
   }
 );
 
+const alertGenerationConnection = createRedisConnection({ maxRetriesPerRequest: null });
+
+export const mentorAlertGenerationWorker = new Worker<MentorAlertGenerationJob>(
+  'mentor-alert-generation',
+  async (job: Job<MentorAlertGenerationJob>) => processMentorAlertJob(job),
+  { connection: alertGenerationConnection, concurrency: 2 },
+);
+
 mentorAlertWorker.on('completed', (job) => {
   logger.info('Mentor alert job completed', { jobId: job.id });
 });
@@ -69,11 +77,27 @@ mentorAlertWorker.on('error', (error) => {
   logger.error('Mentor alert worker error', { error: error.message });
 });
 
+mentorAlertGenerationWorker.on('failed', (job, error) => {
+  logger.error('ML mentor-alert generation job failed', {
+    jobId: job?.id,
+    batchId: job?.data.batchId,
+    error: error.message,
+    attempts: job?.attemptsMade,
+  });
+});
+
+mentorAlertGenerationWorker.on('error', (error) => {
+  logger.error('ML mentor-alert generation worker error', { error: error.message });
+});
+
 logger.info('Mentor alert worker started');
 
 export async function closeMentorAlertWorker(): Promise<void> {
-  await mentorAlertWorker.close();
-  if (redisConnection.status !== 'end') await redisConnection.quit();
+  await Promise.all([mentorAlertWorker.close(), mentorAlertGenerationWorker.close()]);
+  await Promise.all([
+    redisConnection.status !== 'end' ? redisConnection.quit() : Promise.resolve(),
+    alertGenerationConnection.status !== 'end' ? alertGenerationConnection.quit() : Promise.resolve(),
+  ]);
 }
 
 // ML-driven smart alert pipeline (Module 14)
@@ -83,11 +107,11 @@ export async function processMentorAlertJob(job: Job): Promise<void> {
   try {
     const result = await generateMentorAlerts(batchId);
     logger.info(`Alert pipeline complete: ${result.total_students_analyzed} analyzed, ${result.alerts_generated} alerts, ${result.alerts_filtered} filtered`);
+    const notifications = [];
     for (const alert of result.alerts) {
-      if (!alert.mentor_id) continue;
+      if (!alert.mentor_id || !alert.id) continue;
       const urgencyEmoji = alert.urgency_tier === 'CRITICAL' ? 'CRITICAL' : alert.urgency_tier === 'HIGH' ? 'HIGH' : 'MODERATE';
-      await prisma.notification.create({
-        data: {
+      notifications.push({
           userId: alert.mentor_id,
           title: `[${urgencyEmoji}] Risk Alert: ${alert.student_name}`,
           message: [
@@ -96,9 +120,14 @@ export async function processMentorAlertJob(job: Job): Promise<void> {
             `Suggested: ${alert.recommended_intervention.replace(/_/g, ' ')} (${(alert.recommendation_confidence * 100).toFixed(0)}% confidence)`,
             alert.recommendation_reasoning,
           ].join('\n'),
-          type: 'RISK_ALERT',
-        },
+          type: 'RISK_ALERT' as const,
+          referenceId: String(alert.id),
+          referenceType: 'mentor_alert',
+          deduplicationKey: `mentor-alert-${alert.id}`,
       });
+    }
+    if (notifications.length) {
+      await prisma.notification.createMany({ data: notifications, skipDuplicates: true });
     }
     logger.info(`Created ${result.alerts.length} notifications for mentors`);
   } catch (error) {

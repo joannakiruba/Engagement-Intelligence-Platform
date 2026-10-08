@@ -114,6 +114,17 @@ router.put(
         if (!owns) { sendError(res, 'Alert not found.', 404); return; }
       }
 
+      if (req.body.status === 'dismissed') {
+        const activeInterventions = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+          `SELECT id FROM interventions WHERE "alertId" = $1 AND status IN ('PENDING', 'IN_PROGRESS') LIMIT 1`,
+          alertId,
+        );
+        if (activeInterventions.length) {
+          sendError(res, 'This alert has an active intervention and cannot be dismissed.', 409);
+          return;
+        }
+      }
+
       const updated = await updateAlertStatus(alertId, req.body.status);
       sendSuccess(res, updated);
     } catch (err) { next(err); }

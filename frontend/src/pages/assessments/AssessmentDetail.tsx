@@ -47,14 +47,32 @@ export function AssessmentDetail() {
           <div className="flex gap-2">
             <Link
               to={`/assessments/${id}/scores`}
-              className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 shadow-xs"
             >
-              Enter Scores
+              Enter/Edit Scores
             </Link>
+            {(!results?.results?.length || results.results.length === 0) && (
+              <Link
+                to={`/assessments/${id}/upload`}
+                className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 shadow-xs"
+              >
+                Upload CSV
+              </Link>
+            )}
           </div>
         )}
-        {canUpload && !canManage && <Link to={`/assessments/${id}/upload`} className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700">Upload Marks CSV</Link>}
-        {canManage && <Link to={`/assessments/${id}/upload`} className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700">Bulk Upload</Link>}
+        {canUpload && !canManage && (
+          <>
+            {(!results?.results?.length || results.results.length === 0) ? (
+              <Link
+                to={`/assessments/${id}/upload`}
+                className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 shadow-xs"
+              >
+                Upload Marks CSV
+              </Link>
+            ) : null}
+          </>
+        )}
       </div>
 
       <div className="mb-6">

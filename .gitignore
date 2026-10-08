@@ -1,62 +1,59 @@
-# Dependencies
+# Documentation files (except README.md)
+*_REPORT.md
+*_STATUS.md
+*_SETUP.md
+*_FIX.md
+*_SUMMARY.md
+*_AUDIT.md
+*_IMPROVEMENTS.md
+*_ANALYSIS.md
+*_CREATED.md
+*_CREDENTIALS.md
+*_IMPROVEMENT.md
+STUDENT_CREDENTIALS.md
+
+# Test/Sample CSV files
+Names.csv
+assessment-scores.csv
+*.csv
+
+# Test/utility scripts
+backend-api/create-dummy-assessment.ts
+backend-api/verify-*.ts
+
+# Node modules
 node_modules/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-venv/
-env/
-ENV/
-.venv
+**/node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
 
 # Build outputs
 dist/
 build/
-*.egg-info/
-.next/
-out/
-*.tsbuildinfo
-
-# Environment variables
-.env
-.env.local
-.env.*.local
+*.log
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
-.DS_Store
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-
-# Testing
-coverage/
-.nyc_output
-.pytest_cache/
-htmlcov/
-.coverage
 
 # OS
+.DS_Store
 Thumbs.db
-Desktop.ini
 
-# Database
-*.sqlite
-*.db
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.venv
 
-# Prisma
-prisma/dev.db
-
-# Temporary files
-*.tmp
-.cache/
+# Keep README.md
+!README.md

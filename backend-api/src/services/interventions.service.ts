@@ -77,6 +77,18 @@ export async function createIntervention(data: {
         },
       });
 
+      await tx.notification.create({
+        data: {
+          userId: created.studentId,
+          title: 'A mentor created an intervention plan for you',
+          message: created.title,
+          type: 'INTERVENTION',
+          referenceId: created.id,
+          referenceType: 'intervention',
+          deduplicationKey: `intervention-created-${created.id}`,
+        },
+      });
+
       return created;
     });
     return { existing: false, intervention };
@@ -161,7 +173,7 @@ export async function updateIntervention(
   return prisma.$transaction(async (tx) => {
     const intervention = await tx.intervention.findUnique({
       where: { id },
-      select: { status: true, mentorId: true, title: true, description: true, deadline: true },
+      select: { status: true, mentorId: true, studentId: true, title: true, description: true, deadline: true },
     });
     if (!intervention) return null;
     if (intervention.mentorId !== mentorId) return null;
@@ -193,6 +205,20 @@ export async function updateIntervention(
       },
     });
 
+    if (data.status && data.status !== intervention.status) {
+      await tx.notification.create({
+        data: {
+          userId: intervention.studentId,
+          title: data.status === 'IN_PROGRESS' ? 'Your intervention plan has started' : 'Your intervention plan was cancelled',
+          message: intervention.title,
+          type: 'INTERVENTION',
+          referenceId: id,
+          referenceType: 'intervention',
+          deduplicationKey: `intervention-status-${id}-${data.status}`,
+        },
+      });
+    }
+
     return updated;
   });
 }
@@ -210,6 +236,7 @@ export async function completeIntervention(
   outcome: 'IMPROVED' | 'NO_CHANGE' | 'DECLINED',
   remarks?: string,
   ipAddress?: string,
+  wasRecommendationFollowed?: boolean,
 ) {
   return prisma.$transaction(async (tx) => {
     const now = new Date();
@@ -241,6 +268,21 @@ export async function completeIntervention(
       },
     });
 
+    const student = await tx.intervention.findUnique({ where: { id: interventionId }, select: { studentId: true, title: true } });
+    if (student) {
+      await tx.notification.create({
+        data: {
+          userId: student.studentId,
+          title: 'Your intervention has been completed',
+          message: `${student.title}: ${outcome.replace('_', ' ')}`,
+          type: 'INTERVENTION',
+          referenceId: interventionId,
+          referenceType: 'intervention',
+          deduplicationKey: `intervention-completed-${interventionId}`,
+        },
+      });
+    }
+
     if (intervention.alertId) {
       const alertRows = await tx.$queryRawUnsafe<Array<{ created_at: Date; acted_at: Date | null }>>(
         `SELECT created_at, acted_at FROM ml_mentor_alerts WHERE id = $1`,
@@ -252,10 +294,13 @@ export async function completeIntervention(
 
       await tx.$queryRawUnsafe(
         `INSERT INTO ml_alert_outcomes (alert_id, mentor_response, intervention_id, was_recommendation_followed, response_time_hours, outcome_notes)
-         VALUES ($1, 'acted', $2, NULL, $3, $4)
-         ON CONFLICT (alert_id, intervention_id) WHERE intervention_id IS NOT NULL DO NOTHING`,
+         VALUES ($1, 'acted', $2, $3, $4, $5)
+         ON CONFLICT (alert_id, intervention_id) WHERE intervention_id IS NOT NULL
+         DO UPDATE SET was_recommendation_followed = EXCLUDED.was_recommendation_followed,
+                       outcome_notes = EXCLUDED.outcome_notes`,
         intervention.alertId,
         interventionId,
+        wasRecommendationFollowed ?? null,
         responseTimeHours,
         remarks || null,
       );
@@ -336,7 +381,7 @@ export async function createTask(
   return prisma.$transaction(async (tx) => {
     const intervention = await tx.intervention.findUnique({
       where: { id: interventionId },
-      select: { status: true, mentorId: true },
+      select: { status: true, mentorId: true, studentId: true },
     });
     if (!intervention) return null;
     if (intervention.mentorId !== mentorId) return null;
@@ -350,6 +395,18 @@ export async function createTask(
         title: data.title,
         description: data.description || null,
         deadline: data.deadline || null,
+      },
+    });
+
+    await tx.notification.create({
+      data: {
+        userId: intervention.studentId,
+        title: 'A new intervention action item was assigned',
+        message: data.title,
+        type: 'TASK_UPDATE',
+        referenceId: interventionId,
+        referenceType: 'intervention',
+        deduplicationKey: `intervention-task-created-${task.id}`,
       },
     });
 
@@ -373,14 +430,18 @@ export async function updateTask(
   mentorId: string,
   data: { title?: string; description?: string; deadline?: Date | null; isCompleted?: boolean },
   ipAddress?: string,
+  studentTaskOnly = false,
 ) {
   return prisma.$transaction(async (tx) => {
     const task = await tx.interventionTask.findUnique({
       where: { id: taskId },
-      include: { intervention: { select: { id: true, mentorId: true, status: true } } },
+      include: { intervention: { select: { id: true, mentorId: true, studentId: true, status: true } } },
     });
     if (!task) return null;
-    if (task.intervention.mentorId !== mentorId) return null;
+    const authorized = studentTaskOnly
+      ? task.intervention.studentId === mentorId
+      : task.intervention.mentorId === mentorId;
+    if (!authorized) return null;
     if (task.intervention.status === 'COMPLETED' || task.intervention.status === 'CANCELLED') {
       throw new ConflictError('Cannot modify tasks on a terminal intervention.');
     }
@@ -388,9 +449,9 @@ export async function updateTask(
     const oldValues = { title: task.title, description: task.description, deadline: task.deadline, isCompleted: task.isCompleted };
 
     const updateData: Prisma.InterventionTaskUpdateInput = {};
-    if (data.title !== undefined) updateData.title = data.title;
-    if (data.description !== undefined) updateData.description = data.description || null;
-    if (data.deadline !== undefined) updateData.deadline = data.deadline;
+    if (!studentTaskOnly && data.title !== undefined) updateData.title = data.title;
+    if (!studentTaskOnly && data.description !== undefined) updateData.description = data.description || null;
+    if (!studentTaskOnly && data.deadline !== undefined) updateData.deadline = data.deadline;
     if (data.isCompleted !== undefined) {
       updateData.isCompleted = data.isCompleted;
       updateData.completedAt = data.isCompleted ? new Date() : null;
@@ -401,12 +462,26 @@ export async function updateTask(
       data: updateData,
     });
 
+    if (studentTaskOnly && data.isCompleted === true && !task.isCompleted) {
+      await tx.notification.create({
+        data: {
+          userId: task.intervention.mentorId,
+          title: 'A student completed an intervention action item',
+          message: task.title,
+          type: 'TASK_UPDATE',
+          referenceId: task.intervention.id,
+          referenceType: 'intervention',
+          deduplicationKey: `intervention-task-completed-${taskId}-${updated.updatedAt.getTime()}`,
+        },
+      });
+    }
+
     await tx.auditLog.create({
       data: {
         userId: mentorId,
         entityType: 'InterventionTask',
         entityId: taskId,
-        action: 'TASK_UPDATED',
+        action: studentTaskOnly ? 'TASK_COMPLETION_UPDATED_BY_STUDENT' : 'TASK_UPDATED',
         oldValues,
         newValues: data,
         ipAddress: ipAddress || null,

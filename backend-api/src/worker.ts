@@ -1,9 +1,10 @@
 import express from 'express';
 import { config } from './config';
 import { logger } from './utils/logger';
-import { closeQueues, enqueueOverdueCheck } from './jobs/queue';
+import { closeQueues, enqueueOverdueCheck, requeueMentorAlertGeneration } from './jobs/queue';
+import prisma from './lib/prisma';
 import { closeEmailWorker, emailWorker } from './jobs/email.job';
-import { closeMentorAlertWorker, mentorAlertWorker } from './jobs/alert.job';
+import { closeMentorAlertWorker, mentorAlertGenerationWorker, mentorAlertWorker } from './jobs/alert.job';
 import { closeWeeklyReportWorker, weeklyReportWorker } from './jobs/weekly-report.job';
 import { closeOverdueCheckWorker, overdueCheckWorker } from './jobs/overdue-check.job';
 import { computeWeekBounds, scheduleAllWeeklyReports } from './services/weekly-report.service';
@@ -18,6 +19,7 @@ app.get('/health', (_req, res) => {
     workers: {
       email: emailWorker.isRunning(),
       mentorAlert: mentorAlertWorker.isRunning(),
+      mentorAlertGeneration: mentorAlertGenerationWorker.isRunning(),
       weeklyReport: weeklyReportWorker.isRunning(),
       overdueCheck: overdueCheckWorker.isRunning(),
     },
@@ -56,6 +58,27 @@ app.post('/internal/scheduler/overdue-check', async (_req, res, next) => {
     }
     const job = await enqueueOverdueCheck(scheduledAt);
     res.status(202).json({ queued: true, jobId: job.id });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Periodic recovery sweep for risk scores whose original queue trigger was unavailable.
+// ML persistence is keyed by risk snapshot, so retries cannot create duplicate alerts.
+app.post('/internal/scheduler/mentor-alert-recovery', async (_req, res, next) => {
+  try {
+    const snapshots = await prisma.$queryRaw<Array<{ batchId: string; riskScoreId: string }>>`
+      SELECT DISTINCT ON (bm."batchId", rs."studentId")
+        bm."batchId", rs.id AS "riskScoreId"
+      FROM batch_members bm
+      JOIN risk_scores rs ON rs."studentId" = bm."studentId"
+      ORDER BY bm."batchId", rs."studentId", rs."generatedAt" DESC
+    `;
+    const latestByBatch = new Map<string, string>();
+    for (const snapshot of snapshots) latestByBatch.set(snapshot.batchId, snapshot.riskScoreId);
+    await Promise.all([...latestByBatch].map(([batchId, riskScoreId]) =>
+      requeueMentorAlertGeneration(batchId, riskScoreId)));
+    res.status(202).json({ queued: latestByBatch.size });
   } catch (error) {
     next(error);
   }

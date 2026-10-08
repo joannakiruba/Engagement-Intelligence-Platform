@@ -992,6 +992,7 @@ model MlMentorAlert {
   recommendedIntervention  String? @map("recommended_intervention")
   recommendationConfidence Float?  @map("recommendation_confidence")
   recommendationReasoning  String? @map("recommendation_reasoning")
+  sourceRiskScoreId String? @map("source_risk_score_id")
 
   alertStatus String @default("pending") @map("alert_status")
 
@@ -1006,6 +1007,7 @@ model MlMentorAlert {
   @@index([batchId])
   @@index([urgencyTier])
   @@index([alertStatus])
+  @@index([sourceRiskScoreId])
   @@index([createdAt])
   @@map("ml_mentor_alerts")
 }

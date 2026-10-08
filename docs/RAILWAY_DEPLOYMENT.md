@@ -95,9 +95,10 @@ For the optional worker, link a second service to the same repo and `/backend-ap
 
 1. Add the GitHub repository and create each service with its root/config paths above.
 2. Provision PostgreSQL and Redis. Add reference variables for `DATABASE_URL` (and `REDIS_URL`) to every consuming service. For external databases, manually set the connection URL. The database schema/migrations are not applied by these deployment configs.
-3. Add secrets and integration variables to the API and worker. Keep ML private and configure the API's private ML URL.
+3. Add secrets and integration variables to the API and worker. Keep ML private and configure the API's private ML URL. The worker must remain running because it consumes the ML mentor-alert generation queue.
 4. Deploy the API and ML service, generate their required networking settings, set cross-service variables, then deploy the frontend and worker.
 5. Open the frontend, sign in, and verify login/refresh/logout cookies. The refresh cookie is scoped to `/auth`; separate Railway hosts require credentialed CORS and same-site origins. If using unrelated custom domains, browser cookie policy may require a same-origin proxy or a deliberate cookie policy change.
 6. Verify API `/health`, ML `/health` from within the private network, authenticated ML-backed requests, and a queued email/job. Confirm the ML service has no public domain.
+7. Apply the new alert snapshot migration with `cd backend-api; npx prisma migrate deploy --schema src/prisma/schema.prisma` before enabling scoring. Configure an authenticated recurring scheduler to POST to the worker's private `/internal/scheduler/mentor-alert-recovery` endpoint every 15 minutes; the worker API should not be exposed publicly just for this route. This recovers queue triggers lost while Redis is unavailable.
 
 The Docker builds run the existing frontend TypeScript/Vite build, backend Prisma generation/TypeScript build, and ML Python dependency install. Resolve any existing build errors before expecting Railway deployments to become healthy.

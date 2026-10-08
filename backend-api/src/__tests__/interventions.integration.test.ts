@@ -68,13 +68,15 @@ const ROLE_IDS = {
 };
 
 function makeToken(sub: string, roleId: string): string {
-  return jwt.sign({ sub, roleId }, JWT_SECRET, { expiresIn: '1h' });
+  const permissions = (ROLE_PERMS[roleId] || []).map((rp) => rp.permission.code);
+  return jwt.sign({ sub, roleId, permissions }, JWT_SECRET, { expiresIn: '1h' });
 }
 
 // Permission definitions per role for interventions
 const ROLE_PERMS: Record<string, Array<{ permission: { code: string } }>> = {
   [ROLE_IDS.STUDENT]: [
     { permission: { code: 'interventions:read:own' } },
+    { permission: { code: 'tasks:update:own' } },
     { permission: { code: 'notifications:read:own' } },
     { permission: { code: 'notifications:update:own' } },
   ],
@@ -202,10 +204,17 @@ describe('Finding 1: resolveScope("interventions:read") authorization', () => {
     });
 
     it('student can read own intervention', async () => {
+      (prisma.intervention.findUnique as jest.Mock).mockResolvedValue({
+        ...sampleIntervention,
+        updates: [{ id: 'note-1', note: 'mentor-private note' }],
+        outcome: { outcome: 'IMPROVED', remarks: 'private mentor closeout', recordedAt: new Date() },
+      });
       const res = await request(app)
         .get('/api/interventions/int-1')
         .set('Authorization', `Bearer ${studentToken}`);
       expect(res.status).toBe(200);
+      expect(res.body.data.updates).toEqual([]);
+      expect(res.body.data.outcome.remarks).toBeNull();
     });
 
     it('student cannot read another students intervention', async () => {
@@ -214,6 +223,14 @@ describe('Finding 1: resolveScope("interventions:read") authorization', () => {
         .get('/api/interventions/int-1')
         .set('Authorization', `Bearer ${otherStudentToken}`);
       expect(res.status).toBe(404);
+    });
+
+    it('student cannot edit intervention task fields, only completion state', async () => {
+      const res = await request(app)
+        .patch('/api/interventions/int-1/tasks/task-1')
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({ title: 'Change the mentor plan' });
+      expect(res.status).toBe(403);
     });
 
     it('mentor can read own assigned intervention', async () => {
@@ -525,12 +542,14 @@ describe('Intervention completion with alert lifecycle', () => {
           intervention: {
             findUnique: jest.fn()
               .mockResolvedValueOnce({ id: 'int-1', status: 'IN_PROGRESS', mentorId: 'mentor-1', alertId: 5 })
+              .mockResolvedValueOnce(completedIntervention)
               .mockResolvedValueOnce(completedIntervention),
             update: jest.fn().mockResolvedValue(completedIntervention),
           },
           interventionOutcome: {
             create: jest.fn().mockResolvedValue({ id: 'oc-1' }),
           },
+          notification: { create: jest.fn() },
           $queryRawUnsafe: txQueryRawMock,
           auditLog: { create: jest.fn() },
         };
@@ -548,10 +567,10 @@ describe('Intervention completion with alert lifecycle', () => {
     // Verify alert outcome INSERT was called inside the transaction
     const insertCall = txQueryRawMock.mock.calls.find((c: any[]) => c[0].includes('INSERT INTO ml_alert_outcomes'));
     expect(insertCall).toBeDefined();
-    // was_recommendation_followed should be NULL, not true/false
-    expect(insertCall[0]).toContain('NULL');
+    // was_recommendation_followed is nullable when an older client omits it.
+    expect(insertCall[3]).toBeNull();
     // response_time_hours should be acted_at - created_at = 2.5 hours
-    expect(insertCall[3]).toBeCloseTo(2.5);
+    expect(insertCall[4]).toBeCloseTo(2.5);
     // ON CONFLICT prevents duplicates
     expect(insertCall[0]).toContain('ON CONFLICT');
   });
@@ -580,12 +599,14 @@ describe('Intervention completion with alert lifecycle', () => {
           intervention: {
             findUnique: jest.fn()
               .mockResolvedValueOnce({ id: 'int-2', status: 'PENDING', mentorId: 'mentor-1', alertId: null })
+              .mockResolvedValueOnce(completedIntervention)
               .mockResolvedValueOnce(completedIntervention),
             update: jest.fn().mockResolvedValue(completedIntervention),
           },
           interventionOutcome: {
             create: jest.fn().mockResolvedValue({ id: 'oc-2' }),
           },
+          notification: { create: jest.fn() },
           $queryRawUnsafe: jest.fn(),
           auditLog: { create: jest.fn() },
         };

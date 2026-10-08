@@ -21,7 +21,15 @@ export function BulkUpload() {
 
     try {
       const res = await bulkUploadScores(id!, file);
-      setResult(res?.data ?? res);
+      const uploadResult = res?.data ?? res;
+      setResult(uploadResult);
+
+      // If upload was successful (no errors or all succeeded), redirect to view scores page
+      if (uploadResult && (uploadResult.errors === 0 || !uploadResult.errors)) {
+        setTimeout(() => {
+          navigate(`/assessments/${id}`);
+        }, 1500); // Give user time to see success message
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || "Upload failed");
     }
@@ -87,9 +95,14 @@ export function BulkUpload() {
         <div className="mt-8 space-y-4">
           <div className="bg-white border rounded-lg p-4">
             <h3 className="font-semibold text-lg mb-2">Upload Results</h3>
+            {result.errors === 0 && (
+              <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded mb-4">
+                ✓ Upload successful! Redirecting to view scores...
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="bg-blue-50 p-3 rounded">
-                <p className="text-2xl font-bold text-blue-600">{result.totalRows ?? 0}</p>
+                <p className="text-2xl font-bold text-blue-600">{result.total ?? result.totalRows ?? 0}</p>
                 <p className="text-xs text-gray-500">Total Rows</p>
               </div>
               <div className="bg-green-50 p-3 rounded">

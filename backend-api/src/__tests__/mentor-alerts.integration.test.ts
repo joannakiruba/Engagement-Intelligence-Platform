@@ -41,7 +41,8 @@ const ROLE_IDS = {
 };
 
 function makeToken(sub: string, roleId: string): string {
-  return jwt.sign({ sub, roleId }, JWT_SECRET, { expiresIn: '1h' });
+  const permissions = (ROLE_PERMS[roleId] || []).map((rp) => rp.permission.code);
+  return jwt.sign({ sub, roleId, permissions }, JWT_SECRET, { expiresIn: '1h' });
 }
 
 // Permission mappings for roles

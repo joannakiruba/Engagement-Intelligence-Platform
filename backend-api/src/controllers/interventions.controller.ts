@@ -10,6 +10,16 @@ function param(req: Request, name: string): string {
   return Array.isArray(v) ? v[0] : v;
 }
 
+function studentSafeIntervention<T extends { updates?: unknown[]; outcome?: any }>(intervention: T): T {
+  return {
+    ...intervention,
+    updates: [],
+    outcome: intervention.outcome
+      ? { ...intervention.outcome, remarks: null }
+      : intervention.outcome,
+  };
+}
+
 async function verifyAlertOwnership(alertId: number, mentorId: string) {
   const rows = await prisma.$queryRawUnsafe<Array<{ id: number; student_id: string; mentor_id: string }>>(
     `SELECT id, student_id, mentor_id FROM ml_mentor_alerts WHERE id = $1`,
@@ -114,7 +124,10 @@ export async function list(req: Request, res: Response): Promise<void> {
   }
 
   const { interventions, total } = await svc.listInterventions(opts);
-  sendPaginated(res, interventions, total, opts.page, opts.limit);
+  const visibleInterventions = scope === 'own'
+    ? interventions.map(studentSafeIntervention)
+    : interventions;
+  sendPaginated(res, visibleInterventions, total, opts.page, opts.limit);
 }
 
 export async function getById(req: Request, res: Response): Promise<void> {
@@ -139,7 +152,7 @@ export async function getById(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  sendSuccess(res, intervention);
+  sendSuccess(res, scope === 'own' ? studentSafeIntervention(intervention) : intervention);
 }
 
 export async function update(req: Request, res: Response): Promise<void> {
@@ -169,10 +182,10 @@ export async function update(req: Request, res: Response): Promise<void> {
 
 export async function complete(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
-  const { outcome, remarks } = req.body;
+  const { outcome, remarks, wasRecommendationFollowed } = req.body;
 
   try {
-    const result = await svc.completeIntervention(param(req, 'id'), userId, outcome, remarks, req.ip);
+    const result = await svc.completeIntervention(param(req, 'id'), userId, outcome, remarks, req.ip, wasRecommendationFollowed);
     if (!result) {
       sendError(res, 'Intervention not found.', 404);
       return;
@@ -249,6 +262,13 @@ export async function createTask(req: Request, res: Response): Promise<void> {
 export async function updateTask(req: Request, res: Response): Promise<void> {
   const userId = req.user!.sub;
   const { title, description, deadline, isCompleted } = req.body;
+  const permissions: Set<string> = (req as any).heldPermissions || new Set();
+  const studentTaskOnly = permissions.has('tasks:update:own') && !permissions.has('interventions:update:own');
+
+  if (studentTaskOnly && Object.keys(req.body).some((key) => key !== 'isCompleted')) {
+    sendError(res, 'Students may only update completion of their own intervention tasks.', 403);
+    return;
+  }
 
   const task = await svc.getTaskById(param(req, 'taskId'));
   if (!task || task.intervention.id !== param(req, 'id')) {
@@ -257,7 +277,7 @@ export async function updateTask(req: Request, res: Response): Promise<void> {
   }
 
   try {
-    const updated = await svc.updateTask(task.id, userId, { title, description, deadline, isCompleted }, req.ip);
+    const updated = await svc.updateTask(task.id, userId, { title, description, deadline, isCompleted }, req.ip, studentTaskOnly);
     if (!updated) {
       sendError(res, 'Task not found.', 404);
       return;
