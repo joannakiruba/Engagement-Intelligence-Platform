@@ -21,6 +21,8 @@ jest.mock('../services/attendance.service', () => ({
   createAttendanceWindow: jest.fn(),
   getSessionWindows: jest.fn(),
   getExcusedRecords: jest.fn(),
+  isWindowAssignedToMentor: jest.fn(),
+  getAssignedAttendanceWindows: jest.fn(),
 }));
 
 jest.mock('../services/network-verification.service', () => ({
@@ -87,7 +89,7 @@ function mockReq(overrides: Partial<Request> = {}): Request {
     cookies: {},
     ip: '203.0.113.10',
     socket: { remoteAddress: '203.0.113.10' },
-    user: { sub: UUID, roleId: 'role-1' },
+    user: { sub: UUID, roleId: 'role-1', permissions: ['attendance:mark:batch'] },
     ...overrides,
   } as unknown as Request;
 }

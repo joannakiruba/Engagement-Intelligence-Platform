@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 export function FeedbackList() {
   const { user } = useAuth();
   const isTrainer = user?.role === 'TRAINER';
+  const isStudent = user?.role === 'STUDENT';
   const [records, setRecords] = useState<Feedback[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -48,7 +49,7 @@ export function FeedbackList() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Trainer Feedback</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{isStudent ? 'My Feedback' : 'Trainer Feedback'}</h1>
         {isTrainer && (
           <Link
             to="/feedback/new"
@@ -59,7 +60,7 @@ export function FeedbackList() {
         )}
       </div>
 
-      <div className="flex gap-4 mb-4">
+      {!isStudent && <div className="flex gap-4 mb-4">
         <input
           type="text"
           placeholder="Filter by Session ID"
@@ -77,7 +78,7 @@ export function FeedbackList() {
         <button onClick={load} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">
           Apply
         </button>
-      </div>
+      </div>}
 
       {error && <p className="text-red-600 mb-4">{error}</p>}
 
@@ -94,7 +95,7 @@ export function FeedbackList() {
                 <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Session</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Trainer</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Effort</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Participation</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Performance</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Date</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-gray-600">Actions</th>
               </tr>

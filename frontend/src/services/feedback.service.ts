@@ -25,6 +25,16 @@ export async function createFeedback(payload: {
   return res.data?.data ?? res.data;
 }
 
+export async function createBulkFeedback(sessionId: string, records: {
+  studentId: string;
+  effortRating: number;
+  participationRating: number;
+  comments?: string;
+}[]): Promise<any> {
+  const res = await api.post('/api/feedback/bulk', { sessionId, records });
+  return res.data?.data ?? res.data;
+}
+
 export async function updateFeedback(id: string, payload: Partial<{
   effortRating: number;
   participationRating: number;

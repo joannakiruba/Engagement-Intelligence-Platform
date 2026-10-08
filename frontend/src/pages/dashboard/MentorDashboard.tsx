@@ -19,6 +19,7 @@ import {
   ArrowRight,
   PlusCircle,
   Eye,
+  QrCode,
 } from 'lucide-react';
 
 export const MentorDashboard: React.FC = () => {
@@ -83,6 +84,13 @@ export const MentorDashboard: React.FC = () => {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
+          <Link
+            to="/attendance/assigned"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-teal-800 font-semibold text-sm hover:bg-teal-50 shadow-sm transition-all"
+          >
+            <QrCode className="w-4 h-4" />
+            Attendance QR
+          </Link>
           <Link
             to="/interventions/create"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-teal-800 font-semibold text-sm hover:bg-teal-50 shadow-sm transition-all"

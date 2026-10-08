@@ -28,9 +28,18 @@ const mockFns = {
   bulkUploadScores: jest.fn(),
 };
 
+const mockAssessmentFindUnique = jest.fn();
+
 jest.mock("../auth/rbac.middleware", () => ({
   requirePermission: () => (_req: any, _res: any, next: any) => next(),
-  resolveScope: () => (_req: any, _res: any, next: any) => next(),
+  resolveScope: () => (req: any, _res: any, next: any) => { req.resolvedScope = 'any'; next(); },
+  getScopedBatchIds: (...args: any[]) => Promise.resolve('all'),
+  getScopedStudentIds: (...args: any[]) => Promise.resolve('all'),
+}));
+
+jest.mock("../lib/prisma", () => ({
+  __esModule: true,
+  default: { assessment: { findUnique: (...args: any[]) => mockAssessmentFindUnique(...args) } },
 }));
 
 jest.mock("../services/assessments.service", () => {
@@ -70,7 +79,7 @@ function createApp() {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    (req as any).user = { sub: "admin-user-id", roleId: "admin-role-id" };
+    (req as any).user = { sub: "admin-user-id", roleId: "admin-role-id", permissions: ['assessments:read:any', 'assessments:create:batch'] };
     next();
   });
   app.use("/api/assessments", assessmentRoutes);
@@ -82,6 +91,7 @@ const app = createApp();
 
 beforeEach(() => {
   Object.values(mockFns).forEach((fn) => fn.mockReset());
+  mockAssessmentFindUnique.mockReset().mockResolvedValue({ batchId: 'batch-1' });
 });
 
 // ===========================================
@@ -576,7 +586,7 @@ describe("POST /api/assessments/:id/scores/bulk", () => {
     expect(res.status).toBe(200);
     expect(mockFns.bulkUploadScores).toHaveBeenCalledWith("1", [
       { studentId: "stu1", questionId: "q1", score: "10" },
-    ]);
+    ], { batchIds: 'all', studentIds: 'all' });
   });
 
   it("should handle quoted fields in CSV", async () => {
@@ -590,7 +600,7 @@ describe("POST /api/assessments/:id/scores/bulk", () => {
     expect(res.status).toBe(200);
     expect(mockFns.bulkUploadScores).toHaveBeenCalledWith("1", [
       { studentId: "stu1", questionId: "q1", score: "10" },
-    ]);
+    ], { batchIds: 'all', studentIds: 'all' });
   });
 });
 
@@ -666,7 +676,7 @@ describe("Service call verification", () => {
   it("getResults passes assessmentId to service", async () => {
     mockFns.getResults.mockResolvedValue({ assessment: {}, results: [] });
     await request(app).get("/api/assessments/a1/results");
-    expect(mockFns.getResults).toHaveBeenCalledWith("a1");
+    expect(mockFns.getResults).toHaveBeenCalledWith("a1", 'all');
   });
 
   it("getStudentResult passes both ids to service", async () => {

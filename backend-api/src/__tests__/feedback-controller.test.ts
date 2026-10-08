@@ -43,7 +43,7 @@ function mockReq(overrides: Partial<Request> = {}): Request {
     body: {},
     params: {},
     query: {},
-    user: { sub: UUID, roleId: 'role-1' },
+    user: { sub: UUID, roleId: 'role-1', permissions: ['feedback:read:any'] },
     ...overrides,
   } as unknown as Request;
 }
@@ -80,6 +80,18 @@ describe('Feedback Controller — listFeedbackHandler', () => {
 
     expect(listFeedback).toHaveBeenCalledWith({});
   });
+
+  it('forces students to their own received feedback regardless of requested student filter', async () => {
+    (listFeedback as jest.Mock).mockResolvedValue([]);
+    const req = mockReq({
+      query: { studentId: UUID2 },
+      user: { sub: UUID, roleId: 'student-role', permissions: ['feedback:read:own_received'] } as any,
+    });
+
+    await listFeedbackHandler(req, mockRes(), next);
+
+    expect(listFeedback).toHaveBeenCalledWith({ studentId: UUID });
+  });
 });
 
 describe('Feedback Controller — getFeedbackHandler', () => {
@@ -95,6 +107,19 @@ describe('Feedback Controller — getFeedbackHandler', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ success: true, data: fb })
     );
+  });
+
+  it('hides another student\'s feedback from a student', async () => {
+    (getFeedbackById as jest.Mock).mockResolvedValue({ id: UUID2, studentId: UUID2 });
+    const req = mockReq({
+      params: { id: UUID2 },
+      user: { sub: UUID, roleId: 'student-role', permissions: ['feedback:read:own_received'] } as any,
+    });
+    const res = mockRes();
+
+    await getFeedbackHandler(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(404);
   });
 
   it('returns 404 via ServiceError', async () => {
@@ -185,7 +210,7 @@ describe('Feedback Controller — updateFeedbackHandler', () => {
 
     await updateFeedbackHandler(req, res, next);
 
-    expect(updateFeedback).toHaveBeenCalledWith(UUID, { effortRating: 5 });
+    expect(updateFeedback).toHaveBeenCalledWith(UUID, UUID, { effortRating: 5 });
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
@@ -208,7 +233,7 @@ describe('Feedback Controller — deleteFeedbackHandler', () => {
 
     await deleteFeedbackHandler(req, res, next);
 
-    expect(deleteFeedback).toHaveBeenCalledWith(UUID);
+    expect(deleteFeedback).toHaveBeenCalledWith(UUID, UUID);
     expect(res.status).toHaveBeenCalledWith(200);
   });
 

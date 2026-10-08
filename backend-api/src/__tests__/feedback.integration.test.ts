@@ -10,6 +10,8 @@ const fns = {
   fbDelete: jest.fn(),
   sessFindUnique: jest.fn(),
   userFindUnique: jest.fn(),
+  batchMemberFindUnique: jest.fn(),
+  batchTrainerFindUnique: jest.fn(),
 };
 
 jest.mock("../auth/rbac.middleware", () => ({
@@ -34,6 +36,8 @@ jest.mock("../lib/prisma", () => ({
     user: {
       findUnique: (...a: any[]) => fns.userFindUnique(...a),
     },
+    batchMember: { findUnique: (...a: any[]) => fns.batchMemberFindUnique(...a) },
+    batchTrainer: { findUnique: (...a: any[]) => fns.batchTrainerFindUnique(...a) },
   },
 }));
 
@@ -48,6 +52,8 @@ const mockPrisma = {
   },
   session: { findUnique: fns.sessFindUnique },
   user: { findUnique: fns.userFindUnique },
+  batchMember: { findUnique: fns.batchMemberFindUnique },
+  batchTrainer: { findUnique: fns.batchTrainerFindUnique },
 };
 
 import feedbackRoutes from "../routes/feedback.routes";
@@ -57,7 +63,7 @@ function createApp() {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    (req as any).user = { sub: "c0000000-0000-0000-0000-000000000001", roleId: "role-1" };
+    (req as any).user = { sub: "c0000000-0000-0000-0000-000000000001", roleId: "role-1", permissions: ['feedback:read:any', 'feedback:create:batch'] };
     next();
   });
   app.use("/api/feedback", feedbackRoutes);
@@ -71,6 +77,13 @@ beforeEach(() => {
   Object.values(mockPrisma.feedback).forEach((fn) => fn.mockReset());
   mockPrisma.session.findUnique.mockReset();
   mockPrisma.user.findUnique.mockReset();
+  mockPrisma.batchMember.findUnique.mockReset().mockResolvedValue({ id: 'membership-1' });
+  mockPrisma.batchTrainer.findUnique.mockReset().mockResolvedValue(null);
+  mockPrisma.session.findUnique.mockResolvedValue({
+    id: 'a0000000-0000-0000-0000-000000000001',
+    batchId: 'batch-1',
+    trainerId: 'c0000000-0000-0000-0000-000000000001',
+  });
   mockPrisma.feedback.findFirst.mockResolvedValue(null);
 });
 
@@ -78,7 +91,7 @@ const RECORD = {
   id: "fb-1",
   sessionId: "sess-1",
   studentId: "stu-1",
-  trainerId: "tr-1",
+  trainerId: "c0000000-0000-0000-0000-000000000001",
   effortRating: 4,
   participationRating: 3,
   comments: "Good effort",
@@ -148,7 +161,7 @@ describe("POST /api/feedback", () => {
   };
 
   it("creates feedback successfully", async () => {
-    mockPrisma.session.findUnique.mockResolvedValue({ id: payload.sessionId });
+    mockPrisma.session.findUnique.mockResolvedValue({ id: payload.sessionId, batchId: 'batch-1', trainerId: payload.trainerId });
     mockPrisma.user.findUnique
       .mockResolvedValueOnce({ id: payload.studentId })
       .mockResolvedValueOnce({ id: payload.trainerId });
@@ -182,7 +195,7 @@ describe("POST /api/feedback", () => {
   });
 
   it("returns 404 when student not found", async () => {
-    mockPrisma.session.findUnique.mockResolvedValue({ id: payload.sessionId });
+    mockPrisma.session.findUnique.mockResolvedValue({ id: payload.sessionId, batchId: 'batch-1', trainerId: payload.trainerId });
     mockPrisma.user.findUnique.mockResolvedValueOnce(null);
     const res = await request(app).post("/api/feedback").send(payload);
     expect(res.status).toBe(404);
@@ -190,7 +203,7 @@ describe("POST /api/feedback", () => {
   });
 
   it("returns 404 when trainer not found", async () => {
-    mockPrisma.session.findUnique.mockResolvedValue({ id: payload.sessionId });
+    mockPrisma.session.findUnique.mockResolvedValue({ id: payload.sessionId, batchId: 'batch-1', trainerId: payload.trainerId });
     mockPrisma.user.findUnique
       .mockResolvedValueOnce({ id: payload.studentId })
       .mockResolvedValueOnce(null);

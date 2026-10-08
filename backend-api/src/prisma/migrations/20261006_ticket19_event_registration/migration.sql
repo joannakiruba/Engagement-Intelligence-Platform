@@ -30,8 +30,17 @@ ALTER TABLE "events" ADD COLUMN "closedAt" TIMESTAMP(3);
 ALTER TABLE "events" ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 -- createdById: set a default from existing users so NOT NULL is satisfied for any existing rows
-ALTER TABLE "events" ADD COLUMN "createdById" TEXT NOT NULL DEFAULT (SELECT "id" FROM "users" LIMIT 1);
-ALTER TABLE "events" ALTER COLUMN "createdById" DROP DEFAULT;
+ALTER TABLE "events" ADD COLUMN "createdById" TEXT;
+
+UPDATE "events"
+SET "createdById" = (
+    SELECT "id"
+    FROM "users"
+    LIMIT 1
+);
+
+ALTER TABLE "events"
+ALTER COLUMN "createdById" SET NOT NULL;
 
 -- FK for createdById
 ALTER TABLE "events" ADD CONSTRAINT "events_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

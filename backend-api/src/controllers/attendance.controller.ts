@@ -15,6 +15,8 @@ import {
   generateQRForWindow,
   createAttendanceWindow,
   getSessionWindows,
+  getAssignedAttendanceWindows,
+  isWindowAssignedToMentor,
   getExcusedRecords,
 } from '../services/attendance.service';
 import {
@@ -173,8 +175,22 @@ export async function exportExcelHandler(req: Request, res: Response, next: Next
 
 export async function generateQRHandler(req: Request, res: Response, next: NextFunction) {
   try {
+    const windowId = String(req.params.windowId);
+    const canMarkBatch = req.user!.permissions.includes('attendance:mark:batch');
+    if (!canMarkBatch && !(await isWindowAssignedToMentor(windowId, req.user!.sub))) {
+      return sendError(res, 'This attendance window is outside your assigned mentees batches.', 403);
+    }
     const trainerIp = extractClientIp(req);
-    const result = await generateQRForWindow(String(req.params.windowId), trainerIp);
+    const result = await generateQRForWindow(windowId, trainerIp);
+    return sendSuccess(res, result);
+  } catch (err) {
+    return handleServiceError(err, res, next);
+  }
+}
+
+export async function getAssignedAttendanceWindowsHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await getAssignedAttendanceWindows(req.user!.sub);
     return sendSuccess(res, result);
   } catch (err) {
     return handleServiceError(err, res, next);

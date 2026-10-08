@@ -33,18 +33,18 @@ export function BulkUpload() {
   return (
     <div className="max-w-3xl">
       <h1 className="text-2xl font-bold mb-2">Bulk CSV Upload</h1>
-      <p className="text-gray-500 mb-6">Upload question-level scores via CSV</p>
+      <p className="text-gray-500 mb-6">Upload question-level marks for students in this assessment&apos;s batch.</p>
 
       <div className="bg-gray-50 border rounded-lg p-4 mb-6">
         <h3 className="font-medium mb-2">Expected CSV Format</h3>
         <code className="text-sm text-gray-700 block bg-white p-2 rounded border">
           studentId,questionId,score
           <br />
-          uuid-1,uuid-a,85
+          student-uuid,question-uuid,85
           <br />
-          uuid-1,uuid-b,90
+          student-uuid,another-question-uuid,90
           <br />
-          uuid-2,uuid-a,70
+          another-student-uuid,question-uuid,70
         </code>
         <p className="text-xs text-gray-500 mt-2">
           Headers are case-insensitive. One row per student per question.
@@ -93,11 +93,11 @@ export function BulkUpload() {
                 <p className="text-xs text-gray-500">Total Rows</p>
               </div>
               <div className="bg-green-50 p-3 rounded">
-                <p className="text-2xl font-bold text-green-600">{result.successfulRows ?? 0}</p>
-                <p className="text-xs text-gray-500">Successful</p>
+                <p className="text-2xl font-bold text-green-600">{(result.created ?? 0) + (result.updated ?? 0)}</p>
+                <p className="text-xs text-gray-500">Saved / Updated</p>
               </div>
               <div className="bg-red-50 p-3 rounded">
-                <p className="text-2xl font-bold text-red-600">{result.failedRows ?? 0}</p>
+                <p className="text-2xl font-bold text-red-600">{result.errors ?? 0}</p>
                 <p className="text-xs text-gray-500">Failed</p>
               </div>
             </div>

@@ -9,6 +9,7 @@ import {
   Trophy,
   Users,
   CalendarCheck,
+  QrCode,
   Award,
   MessageSquare,
   AlertTriangle,
@@ -34,8 +35,8 @@ interface NavItemDef {
   icon: React.ReactNode;
   requiredPermission?: string;
   requiredAny?: string[];
-  badge?: string;
   allowedRoles?: RoleName[];
+  badge?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
@@ -71,20 +72,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           label: 'Batches & Sessions',
           to: '/batches',
           icon: <Users className="w-4 h-4" />,
-          requiredAny: ['batches:read:own', 'batches:read:any', 'batches:read:assigned'],
           allowedRoles: ['TRAINER', 'FACULTY', 'MENTOR', 'COORDINATOR', 'ADMIN'],
+          requiredAny: ['batches:read:own', 'batches:read:any', 'batches:read:assigned'],
         },
         {
-          label: user?.role === 'STUDENT' ? 'My Attendance' : 'Attendance Control',
-          to: user?.role === 'STUDENT' ? '/attendance/my' : '/attendance/overview',
-          icon: <CalendarCheck className="w-4 h-4" />,
-          requiredAny: ['attendance:mark:self', 'attendance:mark:batch', 'attendance:read:any', 'attendance:read:batch'],
+          label: user?.role === 'STUDENT' ? 'My Attendance' : user?.role === 'MENTOR' ? 'Assigned Session QR' : 'Attendance Control',
+          to: user?.role === 'STUDENT' ? '/attendance/my' : user?.role === 'MENTOR' ? '/attendance/assigned' : '/attendance/overview',
+          icon: user?.role === 'MENTOR' ? <QrCode className="w-4 h-4" /> : <CalendarCheck className="w-4 h-4" />,
+          requiredAny: ['attendance:mark:self', 'attendance:mark:batch', 'attendance:read:any', 'attendance:read:batch', 'attendance:read:assigned'],
         },
         {
           label: 'Assessments',
           to: '/assessments',
           icon: <Award className="w-4 h-4" />,
-          requiredAny: ['assessments:read:own', 'assessments:read:batch', 'assessments:read:any'],
+          requiredAny: ['assessments:read:own', 'assessments:read:batch', 'assessments:read:assigned', 'assessments:read:any'],
         },
         {
           label: 'Trainer Feedback',

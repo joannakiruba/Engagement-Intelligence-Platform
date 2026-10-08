@@ -19,6 +19,11 @@ export async function getSessionWindows(sessionId: string): Promise<any> {
   return res.data?.data ?? res.data;
 }
 
+export async function getAssignedAttendanceWindows(): Promise<any[]> {
+  const res = await api.get('/api/attendance/assigned-windows');
+  return res.data?.data ?? res.data;
+}
+
 export async function getWindowAttendance(windowId: string): Promise<any> {
   const res = await api.get(`/api/attendance/window/${windowId}`);
   return res.data?.data ?? res.data;

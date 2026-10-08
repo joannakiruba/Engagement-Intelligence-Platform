@@ -160,9 +160,10 @@ export async function createAssessment(input: CreateAssessmentInput) {
   return assessment;
 }
 
-export async function listAssessments(filters: { batchId?: string; type?: AssessmentType }) {
+export async function listAssessments(filters: { batchId?: string; batchIds?: string[]; type?: AssessmentType }) {
   const where: Record<string, unknown> = {};
   if (filters.batchId) where.batchId = filters.batchId;
+  if (filters.batchIds) where.batchId = { in: filters.batchIds };
   if (filters.type) where.type = filters.type;
 
   const assessments = await prisma.assessment.findMany({
@@ -192,7 +193,8 @@ export async function listAssessments(filters: { batchId?: string; type?: Assess
   }));
 }
 
-export async function getAssessmentById(id: string) {
+export async function getAssessmentById(id: string, studentIds: string[] | 'all' = 'all') {
+  const studentScope = studentIds === 'all' ? undefined : { in: studentIds };
   const assessment = await prisma.assessment.findUnique({
     where: { id },
     include: {
@@ -204,6 +206,7 @@ export async function getAssessmentById(id: string) {
             orderBy: { sortOrder: "asc" },
             include: {
               studentScores: {
+                ...(studentScope ? { where: { studentId: studentScope } } : {}),
                 include: { student: { select: { id: true, name: true, email: true } } },
               },
             },
@@ -211,6 +214,7 @@ export async function getAssessmentById(id: string) {
         },
       },
       results: {
+        ...(studentScope ? { where: { studentId: studentScope } } : {}),
         include: { student: { select: { id: true, name: true, email: true } } },
       },
     },
@@ -534,7 +538,8 @@ export async function submitQuestionScores(
   return { questionScores: upsertedScores, result: assessmentResult };
 }
 
-export async function getResults(assessmentId: string) {
+export async function getResults(assessmentId: string, studentIds: string[] | 'all' = 'all') {
+  const studentScope = studentIds === 'all' ? undefined : { in: studentIds };
   const assessment = await prisma.assessment.findUnique({
     where: { id: assessmentId },
     include: {
@@ -546,6 +551,7 @@ export async function getResults(assessmentId: string) {
             orderBy: { sortOrder: "asc" },
             include: {
               studentScores: {
+                ...(studentScope ? { where: { studentId: studentScope } } : {}),
                 include: { student: { select: { id: true, name: true, email: true } } },
               },
             },
@@ -553,6 +559,7 @@ export async function getResults(assessmentId: string) {
         },
       },
       results: {
+        ...(studentScope ? { where: { studentId: studentScope } } : {}),
         include: { student: { select: { id: true, name: true, email: true } } },
       },
     },
@@ -705,7 +712,11 @@ interface BulkRow {
   score: string;
 }
 
-export async function bulkUploadScores(assessmentId: string, rows: BulkRow[]) {
+export async function bulkUploadScores(
+  assessmentId: string,
+  rows: BulkRow[],
+  scope: { batchIds?: string[] | 'all'; studentIds?: string[] | 'all' } = {},
+) {
   const assessment = await prisma.assessment.findUnique({
     where: { id: assessmentId },
     include: {
@@ -716,6 +727,9 @@ export async function bulkUploadScores(assessmentId: string, rows: BulkRow[]) {
   });
   if (!assessment) {
     throw new ServiceError("Assessment not found", 404);
+  }
+  if (scope.batchIds !== undefined && scope.batchIds !== 'all' && !scope.batchIds.includes(assessment.batchId)) {
+    throw new ServiceError('Assessment is outside your assigned batches.', 403);
   }
 
   const batchMembers = await prisma.batchMember.findMany({
@@ -772,6 +786,18 @@ export async function bulkUploadScores(assessmentId: string, rows: BulkRow[]) {
         studentId: row.studentId,
         questionId: row.questionId,
         error: "Student does not belong to the assessment's batch",
+      });
+      errors++;
+      continue;
+    }
+
+    if (scope.studentIds !== undefined && scope.studentIds !== 'all' && !scope.studentIds.includes(row.studentId)) {
+      results.push({
+        row: rowNum,
+        status: "error",
+        studentId: row.studentId,
+        questionId: row.questionId,
+        error: "Student is outside your assigned mentees",
       });
       errors++;
       continue;

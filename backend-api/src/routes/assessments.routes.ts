@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { validate } from "../middleware/validate.middleware";
-import { requirePermission } from "../auth/rbac.middleware";
+import { requirePermission, resolveScope } from "../auth/rbac.middleware";
 import {
   createAssessmentSchema,
   updateAssessmentSchema,
@@ -34,8 +34,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Assessment CRUD
 router.post("/", requirePermission('assessments:create:batch'), validate(createAssessmentSchema), createAssessmentHandler);
-router.get("/", requirePermission('assessments:read:own', 'assessments:read:batch', 'assessments:read:assigned', 'assessments:read:any'), listAssessmentsHandler);
-router.get("/:id", requirePermission('assessments:read:own', 'assessments:read:batch', 'assessments:read:assigned', 'assessments:read:any'), getAssessmentHandler);
+router.get("/", requirePermission('assessments:read:own', 'assessments:read:batch', 'assessments:read:assigned', 'assessments:read:any'), resolveScope('assessments:read'), listAssessmentsHandler);
+router.get("/:id", requirePermission('assessments:read:own', 'assessments:read:batch', 'assessments:read:assigned', 'assessments:read:any'), resolveScope('assessments:read'), getAssessmentHandler);
 router.put("/:id", requirePermission('assessments:update:batch', 'assessments:update:any'), validate(updateAssessmentSchema), updateAssessmentHandler);
 router.delete("/:id", requirePermission('assessments:update:batch', 'assessments:update:any'), deleteAssessmentHandler);
 
@@ -58,10 +58,10 @@ router.delete("/:id/questions/:questionId", requirePermission('assessments:updat
 router.post("/:id/scores", requirePermission('assessments:create:batch'), validate(submitScoresSchema), submitScoresHandler);
 
 // Results
-router.get("/:id/results", requirePermission('assessments:read:own', 'assessments:read:batch', 'assessments:read:assigned', 'assessments:read:any'), getResultsHandler);
-router.get("/:id/results/:studentId", requirePermission('assessments:read:own', 'assessments:read:batch', 'assessments:read:assigned', 'assessments:read:any'), getStudentResultHandler);
+router.get("/:id/results", requirePermission('assessments:read:own', 'assessments:read:batch', 'assessments:read:assigned', 'assessments:read:any'), resolveScope('assessments:read'), getResultsHandler);
+router.get("/:id/results/:studentId", requirePermission('assessments:read:own', 'assessments:read:batch', 'assessments:read:assigned', 'assessments:read:any'), resolveScope('assessments:read'), getStudentResultHandler);
 
 // Bulk CSV upload
-router.post("/:id/scores/bulk", requirePermission('assessments:create:batch'), upload.single("file"), bulkUploadHandler);
+router.post("/:id/scores/bulk", requirePermission('assessments:create:batch', 'assessments:read:assigned'), resolveScope('assessments:read'), upload.single("file"), bulkUploadHandler);
 
 export default router;

@@ -20,6 +20,8 @@ import {
   bulkUploadScores,
 } from "../services/assessments.service";
 import { AssessmentType } from "@prisma/client";
+import { getScopedBatchIds, getScopedStudentIds } from "../auth/rbac.middleware";
+import prisma from "../lib/prisma";
 
 function handleServiceError(err: unknown, res: Response, next: NextFunction) {
   if (
@@ -29,6 +31,16 @@ function handleServiceError(err: unknown, res: Response, next: NextFunction) {
     return sendError(res, (err as any).message, (err as any).statusCode);
   }
   next(err);
+}
+
+async function canReadAssessment(req: Request, assessmentId: string): Promise<boolean> {
+  const batchIds = await getScopedBatchIds(req);
+  if (batchIds === 'all') return true;
+  const assessment = await prisma.assessment.findUnique({
+    where: { id: assessmentId },
+    select: { batchId: true },
+  });
+  return Boolean(assessment && batchIds.includes(assessment.batchId));
 }
 
 export async function createAssessmentHandler(req: Request, res: Response, next: NextFunction) {
@@ -42,9 +54,11 @@ export async function createAssessmentHandler(req: Request, res: Response, next:
 
 export async function listAssessmentsHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const filters: { batchId?: string; type?: AssessmentType } = {};
+    const filters: { batchId?: string; batchIds?: string[]; type?: AssessmentType } = {};
     if (req.query.batchId) filters.batchId = String(req.query.batchId);
     if (req.query.type) filters.type = String(req.query.type) as AssessmentType;
+    const batchIds = await getScopedBatchIds(req);
+    if (batchIds !== 'all') filters.batchIds = batchIds;
     const result = await listAssessments(filters);
     return sendSuccess(res, result);
   } catch (err) {
@@ -54,7 +68,9 @@ export async function listAssessmentsHandler(req: Request, res: Response, next: 
 
 export async function getAssessmentHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await getAssessmentById(String(req.params.id));
+    if (!(await canReadAssessment(req, String(req.params.id)))) return sendError(res, 'Assessment not found.', 404);
+    const studentIds = await getScopedStudentIds(req);
+    const result = await getAssessmentById(String(req.params.id), studentIds);
     return sendSuccess(res, result);
   } catch (err) {
     return handleServiceError(err, res, next);
@@ -156,7 +172,9 @@ export async function submitScoresHandler(req: Request, res: Response, next: Nex
 
 export async function getResultsHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await getResults(String(req.params.id));
+    if (!(await canReadAssessment(req, String(req.params.id)))) return sendError(res, 'Assessment not found.', 404);
+    const studentIds = await getScopedStudentIds(req);
+    const result = await getResults(String(req.params.id), studentIds);
     return sendSuccess(res, result);
   } catch (err) {
     return handleServiceError(err, res, next);
@@ -165,6 +183,11 @@ export async function getResultsHandler(req: Request, res: Response, next: NextF
 
 export async function getStudentResultHandler(req: Request, res: Response, next: NextFunction) {
   try {
+    if (!(await canReadAssessment(req, String(req.params.id)))) return sendError(res, 'Assessment result not found.', 404);
+    const studentIds = await getScopedStudentIds(req);
+    if (studentIds !== 'all' && !studentIds.includes(String(req.params.studentId))) {
+      return sendError(res, 'Assessment result not found.', 404);
+    }
     const result = await getStudentResult(
       String(req.params.id),
       String(req.params.studentId)
@@ -220,7 +243,10 @@ export async function bulkUploadHandler(req: Request, res: Response, next: NextF
       score: r.score,
     }));
 
-    const result = await bulkUploadScores(String(req.params.id), rows);
+    const permissions = new Set(req.user!.permissions);
+    const batchIds = await getScopedBatchIds(req);
+    const studentIds = permissions.has('assessments:create:batch') ? 'all' : await getScopedStudentIds(req);
+    const result = await bulkUploadScores(String(req.params.id), rows, { batchIds, studentIds });
 
     const statusCode = result.errors > 0 ? 207 : 200;
     return sendSuccess(res, result, statusCode);

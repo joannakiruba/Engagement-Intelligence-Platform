@@ -29,6 +29,7 @@ import { SessionAttendance } from './pages/attendance/SessionAttendance';
 import { AttendanceReport } from './pages/attendance/AttendanceReport';
 import { ExcusedReview } from './pages/attendance/ExcusedReview';
 import { QRFullscreen } from './pages/attendance/QRFullscreen';
+import { AssignedAttendanceWindows } from './pages/attendance/AssignedAttendanceWindows';
 
 // Assessments
 import { AssessmentList } from './pages/assessments/AssessmentList';
@@ -59,6 +60,9 @@ import { ProofsPage } from './pages/proofs/ProofsPage';
 import { MentorAssignmentsPage } from './pages/mentor/MentorAssignmentsPage';
 import { UserManagementPage } from './pages/admin/UserManagementPage';
 import { ProfilePage } from './pages/profile/ProfilePage';
+import type { RoleName } from './types';
+
+const BATCH_PAGE_ROLES: RoleName[] = ['TRAINER', 'FACULTY', 'MENTOR', 'COORDINATOR', 'ADMIN'];
 
 export default function App() {
   return (
@@ -76,8 +80,16 @@ export default function App() {
           <Route
             path="/attendance/qr-fullscreen/:windowId"
             element={
-              <ProtectedRoute requiredAnyPermissions={['attendance:mark:batch', 'sessions:read:any']}>
+              <ProtectedRoute requiredAnyPermissions={['attendance:mark:batch', 'attendance:read:assigned', 'sessions:read:any']}>
                 <QRFullscreen />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/attendance/assigned"
+            element={
+              <ProtectedRoute requiredPermission="attendance:read:assigned">
+                <AssignedAttendanceWindows />
               </ProtectedRoute>
             }
           />
@@ -110,7 +122,7 @@ export default function App() {
             <Route
               path="/batches"
               element={
-                <ProtectedRoute requiredAnyPermissions={['batches:read:own', 'batches:read:any', 'batches:read:assigned']}>
+                <ProtectedRoute allowedRoles={BATCH_PAGE_ROLES} requiredAnyPermissions={['batches:read:own', 'batches:read:any', 'batches:read:assigned']}>
                   <BatchList />
                 </ProtectedRoute>
               }
@@ -126,7 +138,7 @@ export default function App() {
             <Route
               path="/batches/:id"
               element={
-                <ProtectedRoute requiredAnyPermissions={['batches:read:own', 'batches:read:any', 'batches:read:assigned']}>
+                <ProtectedRoute allowedRoles={BATCH_PAGE_ROLES} requiredAnyPermissions={['batches:read:own', 'batches:read:any', 'batches:read:assigned']}>
                   <BatchDetail />
                 </ProtectedRoute>
               }
@@ -226,7 +238,7 @@ export default function App() {
             <Route
               path="/assessments/:id/upload"
               element={
-                <ProtectedRoute requiredPermission="assessments:create:batch">
+                <ProtectedRoute requiredAnyPermissions={['assessments:create:batch', 'assessments:read:assigned']}>
                   <BulkUpload />
                 </ProtectedRoute>
               }

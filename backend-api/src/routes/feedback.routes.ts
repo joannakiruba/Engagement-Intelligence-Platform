@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { validate } from '../middleware/validate.middleware';
-import { requirePermission } from '../auth/rbac.middleware';
+import { requirePermission, resolveScope } from '../auth/rbac.middleware';
 import {
   createFeedbackSchema,
   bulkCreateFeedbackSchema,
@@ -17,9 +17,9 @@ import {
 
 const router = Router();
 
-router.get('/', requirePermission('feedback:read:own_received', 'feedback:read:own_given', 'feedback:read:assigned', 'feedback:read:any'), listFeedbackHandler);
+router.get('/', requirePermission('feedback:read:own_received', 'feedback:read:own_given', 'feedback:read:assigned', 'feedback:read:any'), resolveScope('feedback:read'), listFeedbackHandler);
 
-router.get('/:id', requirePermission('feedback:read:own_received', 'feedback:read:own_given', 'feedback:read:assigned', 'feedback:read:any'), getFeedbackHandler);
+router.get('/:id', requirePermission('feedback:read:own_received', 'feedback:read:own_given', 'feedback:read:assigned', 'feedback:read:any'), resolveScope('feedback:read'), getFeedbackHandler);
 
 router.post('/', requirePermission('feedback:create:batch'), validate(createFeedbackSchema), createFeedbackHandler);
 

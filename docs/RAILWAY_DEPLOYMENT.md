@@ -21,14 +21,14 @@ For the API, the simplest supported build is root directory `/backend-api`, Dock
 
 ## Configure environment variables
 
-Create one PostgreSQL database and one Redis service (Railway-managed or external) in the same Railway environment, or use compatible external services. Configure the variables below in Railway's Variables tab. Do not commit real secrets.
+Create one PostgreSQL database and one Redis service (Railway-managed or external) in the same Railway project and environment, or use compatible external services. Railway exposes the Postgres URL on the database service; it does not automatically inject it into the backend, worker, or ML service. Add a reference variable to each consumer service as described below. Do not commit real secrets.
 
 ### Backend API
 
 Required:
 
 - `NODE_ENV=production`
-- `DATABASE_URL` — PostgreSQL connection string
+- `DATABASE_URL=${{Postgres.DATABASE_URL}}` — add as a Railway reference variable; replace `Postgres` with the exact name of your PostgreSQL service if different
 - `JWT_SECRET` — high-entropy secret
 - `TOKEN_HASH_SECRET` — separate high-entropy secret
 - `REDIS_URL` — Redis connection string
@@ -38,6 +38,8 @@ Required:
 - `ML_SERVICE_AUTH_MODE=none` — valid only while ML stays private on Railway
 
 The API also needs `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `GOOGLE_DRIVE_CLIENT_EMAIL`, `GOOGLE_DRIVE_PRIVATE_KEY`, and `GOOGLE_DRIVE_FOLDER_ID` for email and proof storage. Set values for integrations actually used. Optional auth/worker settings include `JWT_ACCESS_EXPIRY`, `JWT_REFRESH_EXPIRY_DAYS`, `JWT_REFRESH_ABSOLUTE_CEILING_DAYS`, `JWT_REFRESH_GRACE_WINDOW_SECONDS`, `ML_TIMEOUT_MS`, `WEEKLY_REPORT_ENABLED`, `WEEKLY_REPORT_DAY`, `WEEKLY_REPORT_HOUR`, and `WEEKLY_REPORT_TZ`.
+
+To link Railway PostgreSQL, add a PostgreSQL service to the same project/environment. In the backend API Variables tab, choose **Add Reference Variable**, select the PostgreSQL service's `DATABASE_URL`, and name the consumer variable `DATABASE_URL`. The resulting value should be `${{Postgres.DATABASE_URL}}` (using the actual Railway service name). Repeat for the worker and ML service because Railway variables are scoped per service. If the database is external (for example, Supabase), set `DATABASE_URL` manually to its TLS-enabled connection string instead. Never put credentials in source control.
 
 `PORT` is supplied by Railway; the API reads it and defaults to 3000 locally. Do not set a fixed port unless you configure the same port for the service.
 
@@ -49,7 +51,7 @@ This is a public build-time value embedded in the browser bundle, not a secret. 
 
 ### ML service
 
-- `DATABASE_URL` — same PostgreSQL database connection string used by the backend
+- `DATABASE_URL=${{Postgres.DATABASE_URL}}` — add the same PostgreSQL reference to the ML service
 - `DB_POOL_MIN_SIZE=1`
 - `DB_POOL_MAX_SIZE=5`
 - `MODEL_DIR=./models` (optional; default)
@@ -59,7 +61,7 @@ Railway provides `PORT`; the Dockerfile defaults to 8080 for local use. Include 
 
 ### Worker service
 
-Deploy the optional worker using the API Docker image and `railway.worker.json`. Give it the same database, Redis, JWT, token-hash, SMTP, Google Drive, and ML service variables as required by its jobs. Use `ML_SERVICE_AUTH_MODE=none` only with the private Railway ML service. Keep at least one worker replica running to consume queues; configure weekly and overdue scheduling per the existing worker design and avoid enabling duplicate schedulers.
+Deploy the optional worker using the API Docker image and `railway.worker.json`. Give it the same `DATABASE_URL` PostgreSQL reference plus Redis, JWT, token-hash, SMTP, Google Drive, and ML service variables required by its jobs. Use `ML_SERVICE_AUTH_MODE=none` only with the private Railway ML service. Keep at least one worker replica running to consume queues; configure weekly and overdue scheduling per the existing worker design and avoid enabling duplicate schedulers.
 
 ## Build and deploy commands
 
@@ -92,7 +94,7 @@ For the optional worker, link a second service to the same repo and `/backend-ap
 ## Manual setup and verification
 
 1. Add the GitHub repository and create each service with its root/config paths above.
-2. Provision PostgreSQL and Redis; copy their credentials into Railway variables. The database schema/migrations are not applied by these deployment configs.
+2. Provision PostgreSQL and Redis. Add reference variables for `DATABASE_URL` (and `REDIS_URL`) to every consuming service. For external databases, manually set the connection URL. The database schema/migrations are not applied by these deployment configs.
 3. Add secrets and integration variables to the API and worker. Keep ML private and configure the API's private ML URL.
 4. Deploy the API and ML service, generate their required networking settings, set cross-service variables, then deploy the frontend and worker.
 5. Open the frontend, sign in, and verify login/refresh/logout cookies. The refresh cookie is scoped to `/auth`; separate Railway hosts require credentialed CORS and same-site origins. If using unrelated custom domains, browser cookie policy may require a same-origin proxy or a deliberate cookie policy change.

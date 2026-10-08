@@ -5,8 +5,14 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 function requireEnv(key: string): string {
   const value = process.env[key];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${key}`);
+  if (!value?.trim()) {
+    const setupHint = key === 'DATABASE_URL'
+      ? ' Backend startup requires PostgreSQL. In Railway, add a PostgreSQL service and add a reference variable to this service: DATABASE_URL=${{Postgres.DATABASE_URL}} (replace Postgres with your database service name). Locally, set DATABASE_URL in backend-api/.env using backend-api/.env.example.'
+      : '';
+    throw new Error(`Missing required environment variable: ${key}.${setupHint}`);
+  }
+  if (key === 'DATABASE_URL' && /^\$\{\{.+\}\}$/.test(value.trim())) {
+    throw new Error('DATABASE_URL is an unresolved Railway reference. Add it as a Railway reference variable to the PostgreSQL service, for example ${{Postgres.DATABASE_URL}}.');
   }
   return value;
 }

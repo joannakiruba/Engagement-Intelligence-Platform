@@ -179,6 +179,51 @@ export async function getSessionWindows(sessionId: string) {
   });
 }
 
+async function getMentorBatchIds(mentorId: string): Promise<string[]> {
+  const assignments = await prisma.mentorAssignment.findMany({
+    where: { mentorId },
+    select: { studentId: true },
+  });
+  if (assignments.length === 0) return [];
+
+  const memberships = await prisma.batchMember.findMany({
+    where: { studentId: { in: assignments.map((assignment) => assignment.studentId) } },
+    select: { batchId: true },
+  });
+  return [...new Set(memberships.map((membership) => membership.batchId))];
+}
+
+export async function getAssignedAttendanceWindows(mentorId: string) {
+  const batchIds = await getMentorBatchIds(mentorId);
+  if (batchIds.length === 0) return [];
+
+  return prisma.attendanceWindow.findMany({
+    where: { session: { batchId: { in: batchIds } } },
+    include: {
+      session: {
+        select: {
+          id: true,
+          title: true,
+          scheduledDate: true,
+          batchId: true,
+          batch: { select: { name: true } },
+          trainer: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { startTime: 'desc' },
+  });
+}
+
+export async function isWindowAssignedToMentor(windowId: string, mentorId: string): Promise<boolean> {
+  const window = await prisma.attendanceWindow.findUnique({
+    where: { id: windowId },
+    select: { session: { select: { batchId: true } } },
+  });
+  if (!window) return false;
+  return (await getMentorBatchIds(mentorId)).includes(window.session.batchId);
+}
+
 // --- Student self-check-in (thundering herd protected) ---
 
 export interface CheckInOptions {

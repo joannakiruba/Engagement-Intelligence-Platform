@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 # Load the environment variables from the .env file
 load_dotenv()
 
-MODEL_DIR = Path(os.getenv("MODEL_DIR", str(Path(__file__).resolve().parent.parent / "models")))
+MODEL_DIR = Path(os.getenv("MODEL_DIR", str(Path(__file__).resolve().parents[1] / "models")))
 MODEL_PATH = MODEL_DIR / "risk_model.joblib"
 MODEL_NAME = "logistic_regression"
 MODEL_VERSION = "1.0"

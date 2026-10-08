@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { createFeedback, getFeedback, updateFeedback } from '../../services/feedback.service';
-import { getRoster } from '../../services/batches.service';
-import { getSessions } from '../../services/batches.service';
+import { createBulkFeedback, createFeedback, getFeedback, updateFeedback } from '../../services/feedback.service';
+import { getBatches, getRoster, getSessions } from '../../services/batches.service';
 
 interface StudentRow {
   studentId: string;
@@ -23,15 +22,21 @@ export function FeedbackForm() {
   const [participationRating, setParticipationRating] = useState(3);
   const [comments, setComments] = useState('');
 
-  const [isBulk, setIsBulk] = useState(false);
+  const [isBulk, setIsBulk] = useState(!isEdit);
   const [bulkBatchId, setBulkBatchId] = useState('');
   const [bulkSessionId, setBulkSessionId] = useState('');
+  const [batches, setBatches] = useState<{ id: string; name: string }[]>([]);
   const [sessions, setSessions] = useState<{ id: string; title: string }[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [bulkResult, setBulkResult] = useState<any>(null);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isEdit) getBatches().then(setBatches).catch(() => setBatches([]));
+  }, [isEdit]);
 
   useEffect(() => {
     if (isEdit && id) {
@@ -50,6 +55,9 @@ export function FeedbackForm() {
   }, [id, isEdit]);
 
   useEffect(() => {
+    setBulkSessionId('');
+    setSessions([]);
+    setStudents([]);
     if (bulkBatchId) {
       getSessions(bulkBatchId).then(setSessions).catch(() => setSessions([]));
       getRoster(bulkBatchId)
@@ -101,18 +109,15 @@ export function FeedbackForm() {
     setSaving(true);
     setError('');
     try {
-      for (const row of students) {
-        await createFeedback({
-          sessionId: bulkSessionId,
-          studentId: row.studentId,
-          effortRating: row.effortRating,
-          participationRating: row.participationRating,
-          comments: row.comments || undefined,
-        });
-      }
-      navigate('/feedback');
-    } catch {
-      setError('Failed to save bulk feedback.');
+      const result = await createBulkFeedback(bulkSessionId, students.map((row) => ({
+        studentId: row.studentId,
+        effortRating: row.effortRating,
+        participationRating: row.participationRating,
+        comments: row.comments || undefined,
+      })));
+      setBulkResult(result);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to save bulk feedback.');
     } finally {
       setSaving(false);
     }
@@ -192,7 +197,7 @@ export function FeedbackForm() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Participation Rating (1-5): {participationRating}
+              Performance Rating (1-5): {participationRating}
             </label>
             <input
               type="range"
@@ -235,18 +240,14 @@ export function FeedbackForm() {
       ) : (
         <form onSubmit={handleBulkSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Batch ID</label>
-            <input
-              type="text"
-              required
-              value={bulkBatchId}
-              onChange={(e) => setBulkBatchId(e.target.value)}
-              className="mt-1 block w-full border rounded px-3 py-2 text-sm"
-              placeholder="Batch UUID to load students & sessions"
-            />
+            <label className="block text-sm font-medium text-gray-700">Batch</label>
+            <select required value={bulkBatchId} onChange={(e) => setBulkBatchId(e.target.value)} className="mt-1 block w-full border rounded px-3 py-2 text-sm">
+              <option value="">Select a batch</option>
+              {batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}
+            </select>
           </div>
 
-          {sessions.length > 0 && (
+          {bulkBatchId && (
             <div>
               <label className="block text-sm font-medium text-gray-700">Session</label>
               <select
@@ -282,7 +283,7 @@ export function FeedbackForm() {
                       />
                     </label>
                     <label className="text-xs text-gray-600">
-                      Participation:
+                      Performance:
                       <input
                         type="number"
                         min={1}
@@ -322,6 +323,13 @@ export function FeedbackForm() {
             </button>
           </div>
         </form>
+      )}
+
+      {bulkResult && (
+        <div role="status" className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          Saved feedback for {bulkResult.created ?? 0} students; skipped {bulkResult.skipped?.length ?? 0}.
+          {bulkResult.skipped?.length > 0 && <ul className="mt-2 list-disc pl-5">{bulkResult.skipped.map((item: any) => <li key={item.studentId}>{item.studentId}: {item.reason}</li>)}</ul>}
+        </div>
       )}
     </div>
   );

@@ -18,6 +18,7 @@ interface AssessmentSummary {
 export function AssessmentList() {
   const { user, hasPermission } = useAuth();
   const canManage = hasPermission('assessments:create:batch');
+  const canUpload = canManage || hasPermission('assessments:read:assigned');
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
   const [typeFilter, setTypeFilter] = useState("");
   const [loading, setLoading] = useState(true);
@@ -90,7 +91,7 @@ export function AssessmentList() {
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Type</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Max Score</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
-                {canManage && <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>}
+                {canUpload && <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -110,26 +111,24 @@ export function AssessmentList() {
                   <td className="px-4 py-3 text-sm text-slate-600">
                     {a.assessmentDate ? new Date(a.assessmentDate).toLocaleDateString() : 'N/A'}
                   </td>
-                  {canManage && (
+                  {canUpload && (
                     <td className="px-4 py-3 text-sm text-right space-x-2">
-                      <Link
+                      {canManage && <Link
                         to={`/assessments/${a.id}/scores`}
                         className="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded bg-indigo-50"
-                      >
-                        Scores
-                      </Link>
+                      >Scores</Link>}
                       <Link
                         to={`/assessments/${a.id}/upload`}
                         className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-2 py-1 rounded bg-emerald-50"
                       >
                         Upload CSV
                       </Link>
-                      <button
+                      {canManage && <button
                         onClick={() => handleDelete(a.id)}
                         className="text-xs font-medium text-rose-600 hover:text-rose-800 px-2 py-1 rounded bg-rose-50"
                       >
                         Delete
-                      </button>
+                      </button>}
                     </td>
                   )}
                 </tr>

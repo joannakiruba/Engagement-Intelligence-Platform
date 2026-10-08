@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   getSessionWindows,
@@ -35,6 +35,11 @@ export function MarkAttendance() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const rowsRef = useRef<StudentRow[]>([]);
+
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -47,6 +52,14 @@ export function MarkAttendance() {
   useEffect(() => {
     if (!selectedWindowId) { setLoading(false); return; }
     loadAttendance();
+  }, [selectedWindowId]);
+
+  useEffect(() => {
+    if (!selectedWindowId) return;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadAttendance(true);
+    }, 10_000);
+    return () => window.clearInterval(interval);
   }, [selectedWindowId]);
 
   async function loadWindows() {
@@ -64,8 +77,9 @@ export function MarkAttendance() {
     }
   }
 
-  async function loadAttendance() {
-    setLoading(true);
+  async function loadAttendance(silent = false) {
+    if (silent && rowsRef.current.some((row) => !row.saved)) return;
+    if (!silent) setLoading(true);
     try {
       const res: any = await getWindowAttendance(selectedWindowId);
       const data = res?.data ?? res ?? {};
@@ -99,7 +113,7 @@ export function MarkAttendance() {
     } catch {
       setMessage('Failed to load attendance data');
     }
-    setLoading(false);
+    if (!silent) setLoading(false);
   }
 
   function updateRow(idx: number, field: 'status' | 'remarks', value: string) {

@@ -1,21 +1,37 @@
-import { useEffect, useState } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import type { IScannerControls } from '@zxing/browser';
 import { studentCheckIn } from '../../services/attendance.service';
 
 type CheckInState = 'loading' | 'success' | 'already' | 'error';
 
 export function StudentCheckIn() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [state, setState] = useState<CheckInState>('loading');
   const [message, setMessage] = useState('');
   const [sessionTitle, setSessionTitle] = useState('');
   const windowId = searchParams.get('windowId') || '';
   const token = searchParams.get('token') || '';
+  const handleScan = useCallback((value: string): boolean => {
+    try {
+      const url = new URL(value, window.location.origin);
+      const scannedWindowId = url.searchParams.get('windowId');
+      const scannedToken = url.searchParams.get('token');
+      if (!scannedWindowId || !scannedToken) {
+        setMessage('This QR code is not a valid attendance code. Scan the live code shown by your trainer or mentor.');
+        return false;
+      }
+      navigate(`/attendance/check-in?windowId=${encodeURIComponent(scannedWindowId)}&token=${encodeURIComponent(scannedToken)}`, { replace: true });
+      return true;
+    } catch {
+      setMessage('Could not read this QR code. Try scanning the live attendance code again.');
+      return false;
+    }
+  }, [navigate]);
 
   useEffect(() => {
     if (!windowId) {
-      setState('error');
-      setMessage('Missing window ID. Please scan the QR code again.');
       return;
     }
     doCheckIn();
@@ -39,6 +55,10 @@ export function StudentCheckIn() {
         setMessage(errMsg);
       }
     }
+  }
+
+  if (!windowId) {
+    return <QRScanner onScan={handleScan} message={message} />;
   }
 
   return (
@@ -102,4 +122,56 @@ export function StudentCheckIn() {
     </div>
   );
 }
+
+function QRScanner({ onScan, message }: { onScan: (value: string) => boolean; message: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [cameraError, setCameraError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    let controls: IScannerControls | undefined;
+    const startScanner = async () => {
+      try {
+        const { BrowserQRCodeReader } = await import('@zxing/browser');
+        if (!active || !videoRef.current) return;
+        const reader = new BrowserQRCodeReader();
+        const scannerControls = await reader.decodeFromVideoDevice(undefined, videoRef.current, (result, _error, callbackControls) => {
+          controls = callbackControls;
+          if (active && result && onScan(result.getText())) {
+            active = false;
+            callbackControls.stop();
+          }
+        });
+        if (active) controls = scannerControls;
+        else scannerControls.stop();
+      } catch (error: unknown) {
+        if (active) {
+          setCameraError(error instanceof Error && error.name === 'NotAllowedError'
+            ? 'Camera access was blocked. Allow camera access in your browser, then reload this page.'
+            : 'Could not start the camera. Use HTTPS and allow camera access, then try again.');
+        }
+      }
+    };
+
+    void startScanner();
+
+    return () => {
+      active = false;
+      controls?.stop();
+    };
+  }, [onScan]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 text-center shadow-xl">
+        <h1 className="text-2xl font-bold text-slate-900">Scan attendance QR</h1>
+        <p className="mt-2 text-sm text-slate-600">Point your camera at the live QR code on your trainer&apos;s or mentor&apos;s screen.</p>
+        <video ref={videoRef} className="mt-5 aspect-video w-full rounded-xl bg-black object-cover" muted playsInline />
+        {(cameraError || message) && <p role="alert" className="mt-4 text-sm text-rose-700">{cameraError || message}</p>}
+        <Link to="/" className="mt-5 inline-block text-sm font-medium text-indigo-600">Cancel</Link>
+      </div>
+    </div>
+  );
+}
+
 export default StudentCheckIn;

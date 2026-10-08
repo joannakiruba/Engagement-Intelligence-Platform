@@ -7,6 +7,7 @@ export function AssessmentDetail() {
   const { id } = useParams();
   const { user, hasPermission } = useAuth();
   const canManage = hasPermission('assessments:create:batch');
+  const canUpload = canManage || hasPermission('assessments:read:assigned');
 
   const [error, setError] = useState('');
   const [assessment, setAssessment] = useState<any>(null);
@@ -50,14 +51,10 @@ export function AssessmentDetail() {
             >
               Enter Scores
             </Link>
-            <Link
-              to={`/assessments/${id}/upload`}
-              className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700"
-            >
-              Bulk Upload
-            </Link>
           </div>
         )}
+        {canUpload && !canManage && <Link to={`/assessments/${id}/upload`} className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700">Upload Marks CSV</Link>}
+        {canManage && <Link to={`/assessments/${id}/upload`} className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700">Bulk Upload</Link>}
       </div>
 
       <div className="mb-6">
