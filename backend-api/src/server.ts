@@ -28,6 +28,7 @@ import interventionRoutes from './routes/interventions.routes';
 import notificationRoutes from './routes/notifications.routes';
 import weeklyReportRoutes from './routes/weekly-report.routes';
 import eventRegistrationRoutes from './routes/event-registrations.routes';
+import trainingHistoryRoutes from './routes/training-history.routes';
 
 const app = express();
 
@@ -68,6 +69,7 @@ app.use('/api/interventions', authenticateJwt, interventionRoutes);
 app.use('/api/notifications', authenticateJwt, notificationRoutes);
 app.use('/api/weekly-reports', authenticateJwt, weeklyReportRoutes);
 app.use('/api/event-registrations', authenticateJwt, eventRegistrationRoutes);
+app.use('/api/training-history', authenticateJwt, trainingHistoryRoutes);
 
 app.use(errorHandler);
 

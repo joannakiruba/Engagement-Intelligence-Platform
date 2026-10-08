@@ -18,7 +18,8 @@
     { "name": "Attendance", "description": "Session attendance tracking" },
     { "name": "Feedback", "description": "Trainer feedback on students" },
     { "name": "Mentor Assignments", "description": "Mentor-student assignment management" },
-    { "name": "Weekly Reports", "description": "Weekly risk analysis reports for mentors" }
+    { "name": "Weekly Reports", "description": "Weekly risk analysis reports for mentors" },
+    { "name": "Training History", "description": "Student training history timeline (sessions + assessments)" }
   ],
   "components": {
     "securitySchemes": {
@@ -239,6 +240,80 @@
           "created": { "type": "integer" },
           "updated": { "type": "integer" },
           "errors": { "type": "array", "items": { "type": "object", "properties": { "row": { "type": "integer" }, "studentId": { "type": "string" }, "questionId": { "type": "string" }, "error": { "type": "string" } } } }
+        }
+      },
+      "SessionEvent": {
+        "type": "object",
+        "required": ["type", "date", "session", "attendance"],
+        "properties": {
+          "type": { "type": "string", "enum": ["SESSION"], "example": "SESSION" },
+          "date": { "type": "string", "format": "date-time", "description": "Session scheduled date" },
+          "session": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "title": { "type": "string" },
+              "topic": { "type": "string", "nullable": true }
+            }
+          },
+          "attendance": {
+            "type": "string",
+            "enum": ["PRESENT", "ABSENT", "LATE", "EXCUSED"],
+            "nullable": true,
+            "description": "Student attendance status (null if no attendance record exists)"
+          }
+        }
+      },
+      "AssessmentEvent": {
+        "type": "object",
+        "required": ["type", "date", "assessment"],
+        "properties": {
+          "type": { "type": "string", "enum": ["ASSESSMENT"], "example": "ASSESSMENT" },
+          "date": { "type": "string", "format": "date-time", "description": "Assessment date" },
+          "assessment": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "title": { "type": "string" },
+              "type": { "type": "string", "enum": ["CODING_TEST", "QUIZ", "ASSIGNMENT", "CONTEST"] }
+            }
+          },
+          "score": {
+            "type": "object",
+            "nullable": true,
+            "description": "Score details (null if student has not taken the assessment)",
+            "properties": {
+              "obtained": { "type": "number" },
+              "maximum": { "type": "number" },
+              "percentage": { "type": "number", "description": "Calculated percentage (0-100)" }
+            }
+          },
+          "remarks": { "type": "string", "nullable": true }
+        }
+      },
+      "TimelineEvent": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/SessionEvent" },
+          { "$ref": "#/components/schemas/AssessmentEvent" }
+        ]
+      },
+      "PaginatedTimeline": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TimelineEvent" }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "total": { "type": "integer", "description": "Total number of timeline events" },
+              "page": { "type": "integer", "description": "Current page number" },
+              "limit": { "type": "integer", "description": "Items per page" },
+              "pages": { "type": "integer", "description": "Total number of pages" }
+            }
+          }
         }
       }
     },
@@ -553,6 +628,96 @@
         "security": [{ "BearerAuth": [] }],
         "responses": {
           "200": { "description": "Schedule config", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": { "enabled": { "type": "boolean" }, "dayOfWeek": { "type": "integer", "minimum": 0, "maximum": 6 }, "hour": { "type": "integer", "minimum": 0, "maximum": 23 }, "timezone": { "type": "string" }, "cronExpression": { "type": "string" } } } } } } } }
+        }
+      }
+    },
+    "/api/training-history": {
+      "get": {
+        "summary": "Get authenticated student's training history",
+        "description": "Returns a chronological timeline combining session attendance and assessment results for the authenticated student. Events are sorted newest-first. Student identity is extracted from the JWT token.",
+        "tags": ["Training History"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (default: 1)",
+            "schema": { "type": "integer", "minimum": 1, "default": 1 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Items per page (default: 20, max: 100)",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Filter events on or after this date (ISO 8601)",
+            "schema": { "type": "string", "format": "date-time" }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Filter events on or before this date (ISO 8601)",
+            "schema": { "type": "string", "format": "date-time" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Timeline events with pagination",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PaginatedTimeline" },
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "type": "ASSESSMENT",
+                      "date": "2026-10-07T15:00:00.000Z",
+                      "assessment": {
+                        "id": "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+                        "title": "DP Assessment",
+                        "type": "QUIZ"
+                      },
+                      "score": {
+                        "obtained": 86,
+                        "maximum": 100,
+                        "percentage": 86
+                      },
+                      "remarks": "Good work"
+                    },
+                    {
+                      "type": "SESSION",
+                      "date": "2026-10-07T10:00:00.000Z",
+                      "session": {
+                        "id": "b2c3d4e5-f6a7-4890-b123-456789abcdef",
+                        "title": "Advanced DSA",
+                        "topic": "Dynamic Programming"
+                      },
+                      "attendance": "PRESENT"
+                    }
+                  ],
+                  "pagination": {
+                    "total": 42,
+                    "page": 1,
+                    "limit": 20,
+                    "pages": 3
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error (invalid pagination, dates, or date range)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
     }
