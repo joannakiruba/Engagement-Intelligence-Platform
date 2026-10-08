@@ -2,6 +2,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import type { RoleName } from '../../types';
 import {
   LayoutDashboard,
   BarChart3,
@@ -34,6 +35,7 @@ interface NavItemDef {
   requiredPermission?: string;
   requiredAny?: string[];
   badge?: string;
+  allowedRoles?: RoleName[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
@@ -70,6 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           to: '/batches',
           icon: <Users className="w-4 h-4" />,
           requiredAny: ['batches:read:own', 'batches:read:any', 'batches:read:assigned'],
+          allowedRoles: ['TRAINER', 'FACULTY', 'MENTOR', 'COORDINATOR', 'ADMIN'],
         },
         {
           label: user?.role === 'STUDENT' ? 'My Attendance' : 'Attendance Control',
@@ -202,6 +205,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           {navGroups.map((group, gIdx) => {
             // Filter items based on user permissions
             const visibleItems = group.items.filter((item) => {
+              if (item.allowedRoles && !item.allowedRoles.includes(user?.role as RoleName)) {
+                return false;
+              }
               if (item.requiredPermission && !hasPermission(item.requiredPermission)) {
                 return false;
               }
