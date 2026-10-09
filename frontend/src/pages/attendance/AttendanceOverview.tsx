@@ -95,7 +95,7 @@ export function AttendanceOverview() {
         </div>
         <EmptyState
           title="No Sessions Found"
-          message="There are no scheduled sessions in your batches yet."
+          description="There are no scheduled sessions in your batches yet."
         />
       </div>
     );
