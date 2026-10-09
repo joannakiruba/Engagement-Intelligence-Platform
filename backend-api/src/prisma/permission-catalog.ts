@@ -257,6 +257,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'batches:read:assigned',
     'sessions:read:assigned',
     'attendance:read:assigned',
+    'attendance:export',
     'assessments:read:assigned',
     'feedback:read:assigned',
     'mentor_assignments:read:own',
@@ -269,6 +270,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'notifications:read:own',
     'notifications:update:own',
     'events:read:any',
+    'tasks:read:any',
   ],
 
   COORDINATOR: [

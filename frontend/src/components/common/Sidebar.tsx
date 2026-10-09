@@ -59,7 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose, isCol
           label: 'Engagement Analytics',
           to: '/engagement',
           icon: <BarChart3 className="w-4 h-4" />,
-          requiredAny: ['batches:read:any', 'attendance:export', 'sessions:read:any'],
+          requiredAny: ['batches:read:any', 'batches:read:assigned', 'attendance:export', 'sessions:read:any', 'sessions:read:assigned'],
         },
         {
           label: 'Weekly Leaderboard',
@@ -80,9 +80,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose, isCol
           requiredAny: ['batches:read:own', 'batches:read:any', 'batches:read:assigned'],
         },
         {
-          label: user?.role === 'STUDENT' ? 'My Attendance' : user?.role === 'MENTOR' ? 'Assigned Session QR' : 'Attendance Control',
-          to: user?.role === 'STUDENT' ? '/attendance/my' : user?.role === 'MENTOR' ? '/attendance/assigned' : '/attendance/overview',
-          icon: user?.role === 'MENTOR' ? <QrCode className="w-4 h-4" /> : <CalendarCheck className="w-4 h-4" />,
+          label: user?.role === 'STUDENT' ? 'My Attendance' : 'Attendance',
+          to: user?.role === 'STUDENT' ? '/attendance/my' : '/attendance/overview',
+          icon: <CalendarCheck className="w-4 h-4" />,
           requiredAny: ['attendance:mark:self', 'attendance:mark:batch', 'attendance:read:any', 'attendance:read:batch', 'attendance:read:assigned'],
         },
         {

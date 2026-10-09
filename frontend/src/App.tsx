@@ -30,6 +30,7 @@ import { AttendanceReport } from './pages/attendance/AttendanceReport';
 import { ExcusedReview } from './pages/attendance/ExcusedReview';
 import { QRFullscreen } from './pages/attendance/QRFullscreen';
 import { AssignedAttendanceWindows } from './pages/attendance/AssignedAttendanceWindows';
+import { AttendanceOverview } from './pages/attendance/AttendanceOverview';
 
 // Assessments
 import { AssessmentList } from './pages/assessments/AssessmentList';
@@ -101,7 +102,7 @@ export default function App() {
             <Route
               path="/engagement"
               element={
-                <ProtectedRoute requiredAnyPermissions={['batches:read:any', 'attendance:export', 'sessions:read:any']}>
+                <ProtectedRoute requiredAnyPermissions={['batches:read:any', 'batches:read:assigned', 'attendance:export', 'sessions:read:any', 'sessions:read:assigned']}>
                   <EngagementDashboard />
                 </ProtectedRoute>
               }
@@ -156,15 +157,15 @@ export default function App() {
             <Route
               path="/attendance/overview"
               element={
-                <ProtectedRoute requiredAnyPermissions={['attendance:read:batch', 'attendance:read:any']}>
-                  <SessionAttendance />
+                <ProtectedRoute requiredAnyPermissions={['attendance:read:batch', 'attendance:read:any', 'attendance:read:assigned']}>
+                  <AttendanceOverview />
                 </ProtectedRoute>
               }
             />
             <Route
               path="/attendance/session/:id"
               element={
-                <ProtectedRoute requiredAnyPermissions={['attendance:read:batch', 'attendance:read:any']}>
+                <ProtectedRoute requiredAnyPermissions={['attendance:read:batch', 'attendance:read:any', 'attendance:read:assigned']}>
                   <SessionAttendance />
                 </ProtectedRoute>
               }

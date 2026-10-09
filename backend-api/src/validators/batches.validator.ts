@@ -32,16 +32,16 @@ export const assignTrainerSchema = Joi.object({
 });
 
 export const createSessionSchema = Joi.object({
-  trainerId: Joi.string().uuid().required()
+  trainerId: Joi.string().uuid().optional()
     .messages({ 'string.guid': 'trainerId must be a valid UUID' }),
   title: Joi.string().min(1).required()
     .messages({ 'string.empty': 'Session title is required' }),
   topic: Joi.string().optional(),
   scheduledDate: Joi.string().isoDate().required()
     .messages({ 'string.isoDate': 'scheduledDate must be a valid ISO datetime' }),
-  startTime: Joi.string().isoDate().required()
+  startTime: Joi.string().isoDate().optional()
     .messages({ 'string.isoDate': 'startTime must be a valid ISO datetime' }),
-  endTime: Joi.string().isoDate().required()
+  endTime: Joi.string().isoDate().optional()
     .messages({ 'string.isoDate': 'endTime must be a valid ISO datetime' }),
 }).custom((value, helpers) => {
   if (value.startTime && value.endTime) {
