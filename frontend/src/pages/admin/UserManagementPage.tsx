@@ -6,6 +6,8 @@ import {
   createUser,
   changeUserRole,
   changeUserStatus,
+  bulkUploadCSV,
+  resendActivation,
 } from '../../services/users.service';
 import { User, RoleName } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -21,6 +23,7 @@ import {
   UserX,
   Edit2,
   Check,
+  Mail,
 } from 'lucide-react';
 
 export const UserManagementPage: React.FC = () => {
@@ -46,6 +49,15 @@ export const UserManagementPage: React.FC = () => {
   const [targetUser, setTargetUser] = useState<User | null>(null);
   const [selectedNewRole, setSelectedNewRole] = useState<RoleName>('STUDENT');
   const [submittingRole, setSubmittingRole] = useState(false);
+
+  // Bulk CSV Upload Modal
+  const [csvModalOpen, setCsvModalOpen] = useState(false);
+  const [csvContent, setCsvContent] = useState('');
+  const [submittingCSV, setSubmittingCSV] = useState(false);
+  const [csvResult, setCsvResult] = useState<{
+    created: Array<{ row: number; email: string; userId: string }>;
+    rejected: Array<{ row: number; email?: string; reason: string }>;
+  } | null>(null);
 
   const canCreate = hasPermission('users:create');
   const canChangeRole = hasPermission('users:change_role');
@@ -118,6 +130,47 @@ export const UserManagementPage: React.FC = () => {
     }
   };
 
+  const handleBulkCSVUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!csvContent.trim()) return;
+    try {
+      setSubmittingCSV(true);
+      const result = await bulkUploadCSV(csvContent);
+      setCsvResult(result);
+      if (result.created.length > 0) {
+        await loadData();
+      }
+    } catch (err) {
+      console.error(err);
+      alert(getErrorMessage(err));
+    } finally {
+      setSubmittingCSV(false);
+    }
+  };
+
+  const handleResendActivation = async (user: User) => {
+    if (user.status !== 'PENDING') return;
+    if (!confirm(`Resend activation email to ${user.email}?`)) return;
+    try {
+      await resendActivation(user.email);
+      alert('Activation email has been queued for delivery.');
+    } catch (err) {
+      console.error(err);
+      alert(getErrorMessage(err));
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      setCsvContent(text);
+    };
+    reader.readAsText(file);
+  };
+
   if (loading) {
     return <LoadingState message="Loading platform users and security directory..." />;
   }
@@ -152,13 +205,26 @@ export const UserManagementPage: React.FC = () => {
         </div>
 
         {canCreate && (
-          <button
-            onClick={() => setCreateModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-purple-900 font-semibold text-xs hover:bg-purple-50 shadow-sm transition-all shrink-0"
-          >
-            <PlusCircle className="w-4 h-4" />
-            Provision New User
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setCreateModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-purple-900 font-semibold text-xs hover:bg-purple-50 shadow-sm transition-all shrink-0"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Provision New User
+            </button>
+            <button
+              onClick={() => {
+                setCsvModalOpen(true);
+                setCsvContent('');
+                setCsvResult(null);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-xs hover:bg-indigo-700 shadow-sm transition-all shrink-0"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Bulk CSV Upload
+            </button>
+          </div>
         )}
       </div>
 
@@ -208,7 +274,7 @@ export const UserManagementPage: React.FC = () => {
                 <th className="px-4 py-3">Assigned Role</th>
                 <th className="px-4 py-3">Department</th>
                 <th className="px-4 py-3">Status</th>
-                {(canChangeRole || canActivate) && <th className="px-4 py-3 text-right">Actions</th>}
+                {(canChangeRole || canActivate || canCreate) && <th className="px-4 py-3 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -228,7 +294,7 @@ export const UserManagementPage: React.FC = () => {
                   <td className="px-4 py-3">
                     <StatusBadge status={u.status} type="progress" />
                   </td>
-                  {(canChangeRole || canActivate) && (
+                  {(canChangeRole || canActivate || canCreate) && (
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {canChangeRole && (
@@ -244,7 +310,7 @@ export const UserManagementPage: React.FC = () => {
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        {canActivate && (
+                        {canActivate && u.status !== 'PENDING' && (
                           <button
                             onClick={() => handleToggleStatus(u)}
                             className={`p-1.5 rounded-lg border ${
@@ -255,6 +321,15 @@ export const UserManagementPage: React.FC = () => {
                             title={u.status === 'ACTIVE' ? 'Deactivate User' : 'Activate User'}
                           >
                             {u.status === 'ACTIVE' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                        {canCreate && u.status === 'PENDING' && (
+                          <button
+                            onClick={() => handleResendActivation(u)}
+                            className="p-1.5 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50"
+                            title="Resend Activation Email"
+                          >
+                            <Mail className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
@@ -415,6 +490,98 @@ export const UserManagementPage: React.FC = () => {
               className="px-4 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-semibold flex items-center gap-1.5 shadow-xs"
             >
               <Check className="w-3.5 h-3.5" /> Confirm Role Change
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Bulk CSV Upload Modal */}
+      <Modal
+        isOpen={csvModalOpen}
+        onClose={() => setCsvModalOpen(false)}
+        title="Bulk CSV Upload"
+      >
+        <form onSubmit={handleBulkCSVUpload} className="space-y-4 text-xs">
+          <div>
+            <p className="text-slate-600 mb-3">
+              Upload a CSV file with the following format (header row required):
+            </p>
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 font-mono text-[10px] mb-3">
+              name,email,department,year<br />
+              John Doe,john@example.com,Computer Science,3<br />
+              Jane Smith,jane@example.com,Information Technology,2
+            </div>
+            <p className="text-slate-500 text-[11px] mb-3">
+              • Users will be created with STUDENT role and PENDING status<br />
+              • Activation emails will be queued for each user<br />
+              • Department and year are optional
+            </p>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Select CSV File</label>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              className="w-full p-2.5 border border-slate-200 rounded-lg bg-slate-50 text-xs"
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">CSV Content</label>
+            <textarea
+              value={csvContent}
+              onChange={(e) => setCsvContent(e.target.value)}
+              placeholder="Paste CSV content here or upload a file..."
+              className="w-full p-2.5 border border-slate-200 rounded-lg bg-slate-50 text-xs font-mono"
+              rows={8}
+            />
+          </div>
+
+          {csvResult && (
+            <div className="space-y-2">
+              {csvResult.created.length > 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-lg">
+                  <p className="font-semibold text-emerald-800 mb-1">
+                    ✓ Created {csvResult.created.length} user{csvResult.created.length !== 1 ? 's' : ''}
+                  </p>
+                  <div className="text-emerald-700 text-[11px] max-h-32 overflow-y-auto">
+                    {csvResult.created.map((c) => (
+                      <div key={c.row}>Row {c.row}: {c.email}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {csvResult.rejected.length > 0 && (
+                <div className="bg-rose-50 border border-rose-200 p-3 rounded-lg">
+                  <p className="font-semibold text-rose-800 mb-1">
+                    ✗ Rejected {csvResult.rejected.length} row{csvResult.rejected.length !== 1 ? 's' : ''}
+                  </p>
+                  <div className="text-rose-700 text-[11px] max-h-32 overflow-y-auto">
+                    {csvResult.rejected.map((r, i) => (
+                      <div key={i}>Row {r.row}: {r.reason}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setCsvModalOpen(false)}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-medium"
+            >
+              Close
+            </button>
+            <button
+              type="submit"
+              disabled={submittingCSV || !csvContent.trim()}
+              className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-xs disabled:opacity-50"
+            >
+              {submittingCSV ? 'Processing...' : 'Upload CSV'}
             </button>
           </div>
         </form>
