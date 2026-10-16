@@ -67,3 +67,15 @@ export async function changeUserStatus(id: string, status: 'ACTIVE' | 'INACTIVE'
   const res = await api.patch(`/admin/users/${id}/status`, { status });
   return res.data.data;
 }
+
+export async function bulkUploadCSV(csv: string): Promise<{
+  created: Array<{ row: number; email: string; userId: string }>;
+  rejected: Array<{ row: number; email?: string; reason: string }>;
+}> {
+  const res = await api.post('/admin/users/bulk-csv', { csv });
+  return res.data.data;
+}
+
+export async function resendActivation(email: string): Promise<void> {
+  await api.post('/auth/resend-activation', { email });
+}
